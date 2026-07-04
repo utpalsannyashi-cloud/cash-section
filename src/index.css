@@ -62,4 +62,58 @@
   .label-eyebrow {
     @apply font-mono text-[11px] uppercase tracking-widest text-ink-faint;
   }
+
+  /* ---------------------------------------------------------
+   * Dashboard-style building blocks (stat cards, chip filters,
+   * tab bar, avatar badges, status pills) used across the
+   * Groups / GroupDashboard / SessionDetail / MasterAdmin views.
+   * --------------------------------------------------------- */
+  .stat-card {
+    @apply bg-paper-card border border-rule rounded-lg px-4 py-3.5 transition-colors;
+  }
+  .stat-card-active {
+    @apply border-emerald shadow-glow;
+  }
+  .stat-card-value {
+    @apply font-mono text-2xl font-semibold text-ink leading-tight;
+  }
+  .stat-card-label {
+    @apply text-xs font-medium text-ink-soft;
+  }
+  .stat-card-sub {
+    @apply text-[11px] text-ink-faint mt-0.5;
+  }
+
+  .chip {
+    @apply text-xs px-3 py-1.5 rounded-full border border-rule text-ink-soft transition-colors whitespace-nowrap hover:border-ink/30;
+  }
+  .chip-active {
+    @apply bg-emerald/10 border-emerald text-emerald;
+  }
+
+  .tab-bar {
+    @apply flex items-center gap-5 border-b border-rule mb-6 overflow-x-auto;
+  }
+  .tab-link {
+    @apply text-sm font-medium text-ink-faint pb-3 border-b-2 border-transparent transition-colors whitespace-nowrap hover:text-ink-soft;
+  }
+  .tab-link-active {
+    @apply text-emerald border-emerald;
+  }
+
+  .avatar-circle {
+    @apply w-9 h-9 rounded-full bg-emerald-light text-emerald flex items-center justify-center text-sm font-semibold shrink-0 uppercase;
+  }
+
+  .status-pill {
+    @apply text-[11px] font-mono uppercase tracking-wide px-2 py-1 rounded shrink-0;
+  }
+
+  .list-row {
+    @apply receipt-card p-4 flex items-center gap-3 hover:border-emerald transition-colors;
+  }
+
+  .fab {
+    @apply fixed bottom-5 right-5 z-20 w-14 h-14 rounded-full bg-emerald text-paper flex items-center justify-center text-2xl shadow-glow hover:bg-emerald-dark transition-colors;
+  }
 }
