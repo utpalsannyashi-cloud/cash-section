@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { AddExpenseModal, ParticipantLike } from '@/components/AddExpenseModal';
@@ -9,6 +9,8 @@ import { useAuth } from '@/context/AuthContext';
 import { deriveTotals, simplifyDebts } from '@/utils/settlement';
 import { formatCurrency } from '@/utils/currency';
 import type { Expense, Session, Settlement } from '@/types';
+
+const CODE_PATTERN = /^[a-z0-9]{4,20}$/;
 
 export function SessionDetail() {
   const { sessionId } = useParams();
@@ -25,6 +27,9 @@ export function SessionDetail() {
   const [computing, setComputing] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [customCode, setCustomCode] = useState('');
+  const [savingCode, setSavingCode] = useState(false);
+  const [codeError, setCodeError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!sessionId || !user) return;
@@ -143,9 +148,30 @@ export function SessionDetail() {
   const regenerateAccessCode = async () => {
     if (!sessionId) return;
     setRegenerating(true);
+    setCodeError(null);
     const newCode = Math.random().toString(36).slice(2, 8);
     await supabase.from('sessions').update({ access_code: newCode }).eq('id', sessionId);
     setRegenerating(false);
+    load();
+  };
+
+  const handleSetCustomCode = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!sessionId) return;
+    const code = customCode.trim().toLowerCase();
+    if (!CODE_PATTERN.test(code)) {
+      setCodeError('Use 4–20 lowercase letters/numbers, e.g. goa2026.');
+      return;
+    }
+    setSavingCode(true);
+    setCodeError(null);
+    const { error } = await supabase.from('sessions').update({ access_code: code }).eq('id', sessionId);
+    setSavingCode(false);
+    if (error) {
+      setCodeError(error.message.includes('duplicate') ? 'That passkey is already taken — pick another.' : error.message);
+      return;
+    }
+    setCustomCode('');
     load();
   };
 
@@ -170,61 +196,73 @@ export function SessionDetail() {
       <div className="mb-5">
         <div className="flex items-center justify-between">
           <h1 className="font-mono text-xl font-semibold">{session.title}</h1>
-          <span
-            className={`text-[11px] font-mono uppercase tracking-wide px-2 py-1 rounded ${
-              session.status === 'open' ? 'bg-emerald-light text-emerald-dark' : 'bg-ink/5 text-ink-faint'
-            }`}
-          >
+          <span className={`status-pill ${session.status === 'open' ? 'bg-emerald-light text-emerald-dark' : 'bg-ink/5 text-ink-faint'}`}>
             {session.status}
           </span>
         </div>
         <p className="text-ink-soft text-sm mt-1">
-          Total: <span className="font-mono font-semibold text-ink">{formatCurrency(sessionTotal, session.currency)}</span>{' '}
-          across {participants.length} people
+          {new Date(session.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
         </p>
       </div>
 
-      <Link
-        to={`/groups/${groupId}/insights`}
-        className="receipt-card p-3 mb-4 flex items-center justify-between hover:border-emerald transition-colors"
-      >
-        <span className="text-sm font-medium">✦ Ask the AI about spending patterns</span>
-        <span className="text-ink-faint text-xs">→</span>
-      </Link>
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        <div className="stat-card stat-card-active">
+          <p className="stat-card-label">Total spend</p>
+          <p className="stat-card-value text-lg">{formatCurrency(sessionTotal, session.currency)}</p>
+        </div>
+        <div className="stat-card">
+          <p className="stat-card-label">Expenses</p>
+          <p className="stat-card-value">{expenses.length}</p>
+        </div>
+        <div className="stat-card">
+          <p className="stat-card-label">People</p>
+          <p className="stat-card-value">{participants.length}</p>
+        </div>
+      </div>
 
       {isAdmin ? (
-        <div className="receipt-card p-4 mb-5 flex items-center justify-between">
-          <div>
-            <p className="label-eyebrow mb-1">Session passkey</p>
-            <button onClick={copyAccessCode} className="font-mono text-sm text-emerald hover:underline">
-              {copiedCode ? 'Copied!' : session.access_code}
+        <div className="receipt-card p-4 mb-5 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="label-eyebrow mb-1">Session passkey</p>
+              <button onClick={copyAccessCode} className="font-mono text-sm text-emerald hover:underline">
+                {copiedCode ? 'Copied!' : session.access_code}
+              </button>
+              <p className="text-xs text-ink-faint mt-1">Share this verbally or by message so your group can unlock this session.</p>
+            </div>
+            <button
+              onClick={regenerateAccessCode}
+              disabled={regenerating}
+              className="text-xs text-ink-faint hover:text-brick transition-colors shrink-0"
+            >
+              {regenerating ? 'Regenerating…' : 'Random'}
             </button>
-            <p className="text-xs text-ink-faint mt-1">Share this with the group so they can unlock this session.</p>
           </div>
-          <button
-            onClick={regenerateAccessCode}
-            disabled={regenerating}
-            className="text-xs text-ink-faint hover:text-brick transition-colors shrink-0"
-          >
-            {regenerating ? 'Regenerating…' : 'Regenerate'}
-          </button>
+          <form onSubmit={handleSetCustomCode} className="flex items-center gap-2 pt-2 border-t border-dashed border-rule">
+            <input
+              value={customCode}
+              onChange={(e) => setCustomCode(e.target.value)}
+              className="input-field font-mono flex-1"
+              placeholder="Set your own, e.g. goa2026"
+            />
+            <button type="submit" disabled={savingCode || !customCode.trim()} className="btn-secondary shrink-0">
+              {savingCode ? 'Saving…' : 'Set'}
+            </button>
+          </form>
+          {codeError ? <p className="text-brick text-xs">{codeError}</p> : null}
         </div>
       ) : null}
 
-      <div className="flex gap-2 mb-5">
+      <div className="tab-bar">
         <button
           onClick={() => setView('expenses')}
-          className={`flex-1 text-sm py-2 rounded border transition-colors ${
-            view === 'expenses' ? 'bg-ink text-paper border-ink' : 'border-ink/20 text-ink-soft'
-          }`}
+          className={`tab-link ${view === 'expenses' ? 'tab-link-active' : ''}`}
         >
           Expenses
         </button>
         <button
           onClick={() => setView('settle')}
-          className={`flex-1 text-sm py-2 rounded border transition-colors ${
-            view === 'settle' ? 'bg-ink text-paper border-ink' : 'border-ink/20 text-ink-soft'
-          }`}
+          className={`tab-link ${view === 'settle' ? 'tab-link-active' : ''}`}
         >
           Settle up
         </button>
@@ -292,6 +330,17 @@ export function SessionDetail() {
             load();
           }}
         />
+      ) : null}
+
+      {groupId ? (
+        <Link
+          to={`/groups/${groupId}/insights`}
+          aria-label="Ask the AI about spending patterns"
+          title="Ask the AI about spending patterns"
+          className="fab"
+        >
+          ✦
+        </Link>
       ) : null}
     </Layout>
   );
