@@ -7,6 +7,7 @@ import { Groups } from '@/pages/Groups';
 import { GroupDashboard } from '@/pages/GroupDashboard';
 import { SessionDetail } from '@/pages/SessionDetail';
 import { AdminInsights } from '@/pages/AdminInsights';
+import { MasterAdmin } from '@/pages/MasterAdmin';
 
 export default function App() {
   return (
@@ -35,6 +36,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <AdminInsights />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/master"
+        element={
+          <ProtectedRoute requireFull>
+            <MasterAdmin />
           </ProtectedRoute>
         }
       />
