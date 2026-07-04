@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 
 export function Layout({ children, back }: { children: ReactNode; back?: string }) {
-  const { profile, signOut, isGuest } = useAuth();
+  const { profile, signOut, isGuest, isMasterAdmin } = useAuth();
   const navigate = useNavigate();
 
   return (
@@ -25,7 +25,15 @@ export function Layout({ children, back }: { children: ReactNode; back?: string 
             </Link>
           </div>
           {profile && !isGuest ? (
-            <div className="flex items-center gap-3">
+            <div className="flex-items-center gap-3">
+              {isMasterAdmin ? (
+                <Link
+                  to="/master"
+                  className="text-[11px] font-mono uppercase tracking-wide px-2 py-1 rounded bg-violet/10 text-violet border border-violet/40 hover:bg-violet/20 transition-colors"
+                >
+                  Master admin
+                </Link>
+              ) : null}
               <span className="label-eyebrow hidden sm:inline">@{profile.username}</span>
               <button onClick={() => signOut()} className="text-xs text-ink-faint hover:text-brick transition-colors">
                 Sign out
