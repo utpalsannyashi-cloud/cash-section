@@ -110,15 +110,13 @@ export function GroupDashboard() {
         </div>
       </div>
 
-      {isAdmin ? (
-        <Link
-          to={`/groups/${groupId}/insights`}
-          className="receipt-card p-3 mb-6 flex items-center justify-between hover:border-emerald transition-colors"
-        >
-          <span className="text-sm font-medium">✦ Ask the AI about spending patterns</span>
-          <span className="text-ink-faint text-xs">Admin only →</span>
-        </Link>
-      ) : null}
+      <Link
+        to={`/groups/${groupId}/insights`}
+        className="receipt-card p-3 mb-6 flex items-center justify-between hover:border-emerald transition-colors"
+      >
+        <span className="text-sm font-medium">✦ Ask the AI about spending patterns</span>
+        <span className="text-ink-faint text-xs">→</span>
+      </Link>
 
       <div className="flex items-center justify-between mb-3">
         <h2 className="label-eyebrow">Sessions</h2>
