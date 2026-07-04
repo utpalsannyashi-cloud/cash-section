@@ -10,6 +10,9 @@ interface AuthContextValue {
   loading: boolean;
   /** True when the current session is an anonymous guest (no email/password set). */
   isGuest: boolean;
+  /** True for the single designated Master Admin account, who can see every
+   *  group/session across every admin, not just their own. */
+  isMasterAdmin: boolean;
   signUp: (email: string, password: string, username: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -70,6 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const isGuest = Boolean((session?.user as any)?.is_anonymous);
+  const isMasterAdmin = Boolean(profile?.is_master_admin);
 
   const signUp = async (email: string, password: string, username: string) => {
     // If they're currently an anonymous guest (e.g. they already unlocked a
@@ -114,6 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile,
         loading,
         isGuest,
+        isMasterAdmin,
         signUp,
         signIn,
         signOut,
