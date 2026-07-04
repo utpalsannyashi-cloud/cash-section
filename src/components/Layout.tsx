@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 
 export function Layout({ children, back }: { children: ReactNode; back?: string }) {
-  const { profile, signOut } = useAuth();
+  const { profile, signOut, isGuest } = useAuth();
   const navigate = useNavigate();
 
   return (
@@ -20,18 +20,22 @@ export function Layout({ children, back }: { children: ReactNode; back?: string 
                 ←
               </button>
             ) : null}
-            <Link to="/groups" className="font-mono font-semibold tracking-tight text-ink">
+            <Link to="/" className="font-mono font-semibold tracking-tight text-ink">
               Cash<span className="text-emerald">§</span>ection
             </Link>
           </div>
-          {profile ? (
+          {profile && !isGuest ? (
             <div className="flex items-center gap-3">
               <span className="label-eyebrow hidden sm:inline">@{profile.username}</span>
               <button onClick={() => signOut()} className="text-xs text-ink-faint hover:text-brick transition-colors">
                 Sign out
               </button>
             </div>
-          ) : null}
+          ) : (
+            <Link to="/login" className="text-xs text-ink-faint hover:text-emerald transition-colors">
+              Admin sign in
+            </Link>
+          )}
         </div>
       </header>
       <main className="flex-1 max-w-2xl w-full mx-auto px-4 py-6">{children}</main>
