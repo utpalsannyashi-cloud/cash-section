@@ -59,7 +59,7 @@ export function AdminInsights() {
     <Layout back={`/groups/${groupId}`}>
       <div className="mb-5">
         <h1 className="font-mono text-xl font-semibold">Spending insights</h1>
-        <p className="text-ink-soft text-sm mt-1">Ask about who's spending what, and where it's going. Admin only.</p>
+        <p className="text-ink-soft text-sm mt-1">Ask about who's spending what, and where it's going.</p>
       </div>
 
       {messages.length === 0 ? (
