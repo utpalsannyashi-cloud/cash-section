@@ -21,10 +21,11 @@ export function Browse() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase
-      .rpc('list_browsable_sessions')
-      .then(({ data }) => setSessions((data as BrowsableSession[]) ?? []))
-      .finally(() => setLoading(false));
+    (async () => {
+      const { data } = await supabase.rpc('list_browsable_sessions');
+      setSessions((data as BrowsableSession[]) ?? []);
+      setLoading(false);
+    })();
   }, []);
 
   const handleUnlock = async (e: FormEvent) => {
