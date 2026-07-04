@@ -18,8 +18,8 @@ export default defineConfig({
         name: 'Cash Section',
         short_name: 'Cash Section',
         description: 'Split bills and settle up with your group, on the spot.',
-        theme_color: '#F3F5F0',
-        background_color: '#F3F5F0',
+        theme_color: '#0F172A',
+        background_color: '#0F172A',
         display: 'standalone',
         start_url: '/',
         icons: [
