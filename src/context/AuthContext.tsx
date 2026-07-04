@@ -8,6 +8,8 @@ interface AuthContextValue {
   user: User | null;
   profile: Profile | null;
   loading: boolean;
+  /** True when the current session is an anonymous guest (no email/password set). */
+  isGuest: boolean;
   signUp: (email: string, password: string, username: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -27,11 +29,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      if (data.session?.user) loadProfile(data.session.user.id);
-      setLoading(false);
-    });
+    let cancelled = false;
+
+    // On first load, either resume a real/guest session, or silently start a
+    // new anonymous one — so guests can browse sessions and unlock one with
+    // a passkey without ever hitting a login wall. Admins/members who sign
+    // in for real simply replace this anonymous session afterwards.
+    const bootstrap = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (cancelled) return;
+
+      if (data.session) {
+        setSession(data.session);
+        if (data.session.user) await loadProfile(data.session.user.id);
+      } else {
+        const { data: anon, error } = await supabase.auth.signInAnonymously();
+        if (!error && anon.session && !cancelled) {
+          setSession(anon.session);
+          if (anon.session.user) await loadProfile(anon.session.user.id);
+        }
+      }
+      if (!cancelled) setLoading(false);
+    };
+
+    bootstrap();
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
@@ -42,10 +63,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    return () => listener.subscription.unsubscribe();
+    return () => {
+      cancelled = true;
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
+  const isGuest = Boolean((session?.user as any)?.is_anonymous);
+
   const signUp = async (email: string, password: string, username: string) => {
+    // If they're currently an anonymous guest (e.g. they already unlocked a
+    // session with a passkey), upgrade that same account in place so their
+    // existing session access carries over, instead of creating a new user.
+    if (isGuest && session?.user) {
+      const { error } = await supabase.auth.updateUser({ email, password, data: { username } });
+      if (error) throw error;
+      await supabase.from('profiles').update({ username }).eq('id', session.user.id);
+      return;
+    }
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -61,6 +97,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    // Drop straight back into a fresh anonymous/guest session rather than
+    // leaving the app in a signed-out dead end.
+    await supabase.auth.signInAnonymously();
   };
 
   const refreshProfile = async () => {
@@ -74,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user: session?.user ?? null,
         profile,
         loading,
+        isGuest,
         signUp,
         signIn,
         signOut,
