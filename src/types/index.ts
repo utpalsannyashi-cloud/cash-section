@@ -7,6 +7,7 @@ export interface Profile {
   id: string;
   username: string;
   created_at: string;
+  is_master_admin?: boolean;
 }
 
 export interface Group {
