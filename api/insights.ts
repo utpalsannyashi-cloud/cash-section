@@ -40,7 +40,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   const userId = userData.user.id;
 
-  // 2. Confirm the caller is an admin of this specific group.
+  // 2. Confirm the caller has some standing in this group: either a full
+  // group_members row (any role, not just admin), or a session_participants
+  // row on one of this group's sessions (i.e. they unlocked it with a
+  // passkey). Either is enough to use spending insights.
   const { data: membership } = await supabaseAdmin
     .from('group_members')
     .select('role')
@@ -48,8 +51,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     .eq('user_id', userId)
     .single();
 
-  if (!membership || membership.role !== 'admin') {
-    res.status(403).json({ error: 'Only the group admin can use spending insights' });
+  let authorized = Boolean(membership);
+
+  if (!authorized) {
+    const { data: unlockedSessions } = await supabaseAdmin
+      .from('sessions')
+      .select('id, session_participants!inner(user_id)')
+      .eq('group_id', groupId)
+      .eq('session_participants.user_id', userId)
+      .limit(1);
+    authorized = Boolean(unlockedSessions && unlockedSessions.length > 0);
+  }
+
+  if (!authorized) {
+    res.status(403).json({ error: 'You need access to a session in this group to use spending insights.' });
     return;
   }
 
