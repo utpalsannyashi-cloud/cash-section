@@ -27,24 +27,22 @@ export function SettlementSummary({
       </div>
       <ul>
         {settlements.map((s) => (
-          <li key={s.id} className="p-4 border-b border-rule last:border-b-0 flex items-center justify-between">
-            <div className="ledger-row flex-1">
-              <span className={`text-sm ${s.is_paid ? 'line-through text-ink-faint' : 'text-ink'}`}>
-                @{s.from_profile?.username}
-              </span>
-              <span className="text-ink-faint text-xs">owes</span>
-              <span className={`text-sm ${s.is_paid ? 'line-through text-ink-faint' : 'text-ink'}`}>
-                @{s.to_profile?.username}
-              </span>
-              <span className="ledger-fill" />
-              <span className={`ledger-amount text-sm ${s.is_paid ? 'text-ink-faint' : 'text-brick'}`}>
+          <li key={s.id} className="p-4 border-b border-rule last:border-b-0 flex items-center gap-3">
+            <span className="avatar-circle shrink-0">{s.from_profile?.username?.charAt(0)}</span>
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-medium flex items-center gap-1.5 ${s.is_paid ? 'line-through text-ink-faint' : 'text-ink'}`}>
+                <span className="truncate">@{s.from_profile?.username}</span>
+                <span className="text-ink-faint text-xs shrink-0">→</span>
+                <span className="truncate">@{s.to_profile?.username}</span>
+              </p>
+              <p className={`font-mono text-xs mt-0.5 ${s.is_paid ? 'text-ink-faint' : 'text-amber'}`}>
                 {formatCurrency(s.amount, currency)}
-              </span>
+              </p>
             </div>
             {canMarkPaid(s) ? (
               <button
                 onClick={() => onTogglePaid(s)}
-                className={`ml-3 text-[11px] font-mono uppercase tracking-wide px-2 py-1 rounded shrink-0 ${
+                className={`status-pill shrink-0 ${
                   s.is_paid ? 'bg-ink/5 text-ink-faint' : 'bg-emerald-light text-emerald-dark'
                 }`}
               >
@@ -52,8 +50,8 @@ export function SettlementSummary({
               </button>
             ) : (
               <span
-                className={`ml-3 text-[11px] font-mono uppercase tracking-wide px-2 py-1 rounded shrink-0 ${
-                  s.is_paid ? 'bg-ink/5 text-ink-faint' : 'bg-brick-light text-brick'
+                className={`status-pill shrink-0 ${
+                  s.is_paid ? 'bg-ink/5 text-ink-faint' : 'bg-amber-light text-amber'
                 }`}
               >
                 {s.is_paid ? 'Paid' : 'Pending'}
