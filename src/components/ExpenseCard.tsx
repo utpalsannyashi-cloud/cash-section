@@ -7,7 +7,7 @@ const CATEGORY_ICON: Record<string, string> = {
   Food: '🍽',
   Travel: '🚗',
   Stay: '🛏',
-  Shopping: '🛍',
+  Shopping: '�M',
   Misc: '•'
 };
 
@@ -41,31 +41,35 @@ export function ExpenseCard({
   };
 
   return (
-    <div className="receipt-card p-4">
-      <div className="ledger-row">
-        <span className="text-sm shrink-0" aria-hidden>
-          {CATEGORY_ICON[expense.category] ?? '•'}
-        </span>
-        <span className="text-sm font-medium truncate">{expense.description}</span>
-        <span className="ledger-fill" />
-        <span className="ledger-amount text-sm">{formatCurrency(expense.amount, currency)}</span>
-      </div>
-      <div className="flex items-center justify-between mt-2">
-        <p className="text-xs text-ink-faint">
-          Paid by <span className="text-ink-soft font-medium">@{expense.payer?.username}</span> ·{' '}
-          {new Date(expense.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-        </p>
-        <div className="flex items-center gap-3">
-          {expense.attachment_path ? (
-            <button onClick={viewBill} disabled={loadingBill} className="text-xs text-emerald hover:underline">
-              {loadingBill ? 'Opening…' : 'View bill'}
-            </button>
-          ) : null}
-          {canManage ? (
-            <button onClick={() => onDelete(expense.id)} className="text-xs text-ink-faint hover:text-brick">
-              Delete
-            </button>
-          ) : null}
+    <div className="receipt-card p-4 flex items-start gap-3">
+      <span className="avatar-circle text-base" aria-hidden>
+        {CATEGORY_ICON[expense.category] ?? '•'}
+      </span>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-sm font-medium truncate">{expense.description}</span>
+          <span className="font-mono text-sm font-semibold tabular-nums shrink-0">
+            {formatCurrency(expense.amount, currency)}
+          </span>
+        </div>
+        <div className="flex-items-center justify-between mt-1.5">
+          <p className="text-xs text-ink-faint">
+            Paid by <span className="text-ink-soft font-medium">@{expense.payer?.username}</span> ·{' '}
+            {new Date(expense.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} ·{' '}
+            <span className="uppercase tracking-wide">{expense.category}</span>
+          </p>
+          <div className="flex items-center gap-3 shrink-0">
+            {expense.attachment_path ? (
+              <button onClick={viewBill} disabled={loadingBill} className="text-xs text-emerald hover:underline">
+                {loadingBill ? 'Opening…' : 'View bill'}
+              </button>
+            ) : null}
+            {canManage ? (
+              <button onClick={() => onDelete(expense.id)} className="text-xs text-ink-faint hover:text-brick">
+                Delete
+              </button>
+            ) : null}
+          </div>
         </div>
       </div>
     </div>
