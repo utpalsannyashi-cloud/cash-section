@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  ::selection {
+    background: theme('colors.emerald.light');
+  }
+  :focus-visible {
+    outline: 2px solid theme('colors.emerald.DEFAULT');
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* A single ledger line: label ⋯⋯⋯⋯ amount, like an itemized receipt row. */
+  .ledger-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+  .ledger-row .ledger-fill {
+    flex: 1 1 auto;
+    border-bottom: 2px dotted theme('colors.rule');
+    margin-bottom: 4px;
+    min-width: 12px;
+  }
+  .ledger-amount {
+    font-family: theme('fontFamily.mono');
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  /* Perforated card, used for the settlement / receipt-stub views. */
+  .receipt-card {
+    background: theme('colors.paper.card');
+    border: 1px solid theme('colors.rule');
+    border-radius: 4px;
+    position: relative;
+  }
+  .receipt-tear {
+    height: 10px;
+    background-image: radial-gradient(circle, theme('colors.paper.DEFAULT') 5px, transparent 5.5px);
+    background-size: 16px 16px;
+    background-position: -8px -8px;
+    background-repeat: repeat-x;
+  }
+
+  .btn-primary {
+    @apply bg-emerald text-paper font-medium rounded px-4 py-2.5 text-sm transition-colors hover:bg-emerald-dark disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-secondary {
+    @apply bg-transparent border border-ink/20 text-ink font-medium rounded px-4 py-2.5 text-sm transition-colors hover:bg-ink/5 disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .input-field {
+    @apply w-full bg-paper-card border border-ink/15 rounded px-3 py-2.5 text-sm text-ink placeholder:text-ink-faint focus:border-emerald outline-none transition-colors;
+  }
+  .label-eyebrow {
+    @apply font-mono text-[11px] uppercase tracking-widest text-ink-faint;
+  }
+}
