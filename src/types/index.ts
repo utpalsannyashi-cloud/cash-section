@@ -34,6 +34,7 @@ export interface Session {
   created_by: string;
   created_at: string;
   settled_at: string | null;
+  access_code: string;
 }
 
 export interface ExpenseSplit {
