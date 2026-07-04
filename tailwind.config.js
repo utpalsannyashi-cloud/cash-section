@@ -26,6 +26,16 @@ export default {
           DEFAULT: '#F87171',
           light: '#3F1D1D'
         },
+        violet: {
+          DEFAULT: '#8B5CF6',
+          dark: '#7C3AED',
+          light: '#2E1F5E'
+        },
+        amber: {
+          DEFAULT: '#F59E0B',
+          dark: '#D97706',
+          light: '#4A3111'
+        },
         rule: '#27364A'
       },
       fontFamily: {
@@ -35,6 +45,9 @@ export default {
       backgroundImage: {
         perforation:
           'repeating-linear-gradient(to right, transparent 0 6px, #27364A 6px 8px)'
+      },
+      boxShadow: {
+        glow: '0 0 0 1px rgba(59,130,246,0.4), 0 8px 24px -8px rgba(59,130,246,0.35)'
       }
     }
   },
