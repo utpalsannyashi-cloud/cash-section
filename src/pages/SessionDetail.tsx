@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { AddExpenseModal, ParticipantLike } from '@/components/AddExpenseModal';
 import { ExpenseCard } from '@/components/ExpenseCard';
@@ -23,6 +23,8 @@ export function SessionDetail() {
   const [view, setView] = useState<'expenses' | 'settle'>('expenses');
   const [loading, setLoading] = useState(true);
   const [computing, setComputing] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
 
   const load = useCallback(async () => {
     if (!sessionId || !user) return;
@@ -131,6 +133,22 @@ export function SessionDetail() {
     load();
   };
 
+  const copyAccessCode = async () => {
+    if (!session) return;
+    await navigator.clipboard.writeText(session.access_code);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 1500);
+  };
+
+  const regenerateAccessCode = async () => {
+    if (!sessionId) return;
+    setRegenerating(true);
+    const newCode = Math.random().toString(36).slice(2, 8);
+    await supabase.from('sessions').update({ access_code: newCode }).eq('id', sessionId);
+    setRegenerating(false);
+    load();
+  };
+
   if (loading) {
     return (
       <Layout back={groupId ? `/groups/${groupId}` : '/groups'}>
@@ -165,6 +183,33 @@ export function SessionDetail() {
           across {participants.length} people
         </p>
       </div>
+
+      <Link
+        to={`/groups/${groupId}/insights`}
+        className="receipt-card p-3 mb-4 flex items-center justify-between hover:border-emerald transition-colors"
+      >
+        <span className="text-sm font-medium">✦ Ask the AI about spending patterns</span>
+        <span className="text-ink-faint text-xs">→</span>
+      </Link>
+
+      {isAdmin ? (
+        <div className="receipt-card p-4 mb-5 flex items-center justify-between">
+          <div>
+            <p className="label-eyebrow mb-1">Session passkey</p>
+            <button onClick={copyAccessCode} className="font-mono text-sm text-emerald hover:underline">
+              {copiedCode ? 'Copied!' : session.access_code}
+            </button>
+            <p className="text-xs text-ink-faint mt-1">Share this with the group so they can unlock this session.</p>
+          </div>
+          <button
+            onClick={regenerateAccessCode}
+            disabled={regenerating}
+            className="text-xs text-ink-faint hover:text-brick transition-colors shrink-0"
+          >
+            {regenerating ? 'Regenerating…' : 'Regenerate'}
+          </button>
+        </div>
+      ) : null}
 
       <div className="flex gap-2 mb-5">
         <button
