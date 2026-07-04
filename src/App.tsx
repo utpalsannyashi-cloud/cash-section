@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { Login } from '@/pages/Login';
 import { Signup } from '@/pages/Signup';
+import { Home } from '@/pages/Home';
 import { Groups } from '@/pages/Groups';
 import { GroupDashboard } from '@/pages/GroupDashboard';
 import { SessionDetail } from '@/pages/SessionDetail';
@@ -12,11 +13,11 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
-      <Route path="/" element={<Navigate to="/groups" replace />} />
+      <Route path="/" element={<Home />} />
       <Route
         path="/groups"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requireFull>
             <Groups />
           </ProtectedRoute>
         }
@@ -24,7 +25,7 @@ export default function App() {
       <Route
         path="/groups/:groupId"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute requireFull>
             <GroupDashboard />
           </ProtectedRoute>
         }
@@ -45,7 +46,7 @@ export default function App() {
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<Navigate to="/groups" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
