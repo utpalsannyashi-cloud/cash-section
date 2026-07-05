@@ -7,7 +7,7 @@ const CATEGORY_ICON: Record<string, string> = {
   Food: '🍽',
   Travel: '🚗',
   Stay: '🛏',
-  Shopping: '�M',
+  Shopping: '🛍',
   Misc: '•'
 };
 
@@ -15,11 +15,13 @@ export function ExpenseCard({
   expense,
   currency,
   canManage,
+  onEdit,
   onDelete
 }: {
   expense: Expense;
   currency: string;
   canManage: boolean;
+  onEdit: (expense: Expense) => void;
   onDelete: (id: string) => void;
 }) {
   const [billUrl, setBillUrl] = useState<string | null>(null);
@@ -52,7 +54,7 @@ export function ExpenseCard({
             {formatCurrency(expense.amount, currency)}
           </span>
         </div>
-        <div className="flex-items-center justify-between mt-1.5">
+        <div className="flex items-center justify-between mt-1.5">
           <p className="text-xs text-ink-faint">
             Paid by <span className="text-ink-soft font-medium">@{expense.payer?.username}</span> ·{' '}
             {new Date(expense.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} ·{' '}
@@ -62,6 +64,11 @@ export function ExpenseCard({
             {expense.attachment_path ? (
               <button onClick={viewBill} disabled={loadingBill} className="text-xs text-emerald hover:underline">
                 {loadingBill ? 'Opening…' : 'View bill'}
+              </button>
+            ) : null}
+            {canManage ? (
+              <button onClick={() => onEdit(expense)} className="text-xs text-ink-faint hover:text-emerald">
+                Edit
               </button>
             ) : null}
             {canManage ? (
