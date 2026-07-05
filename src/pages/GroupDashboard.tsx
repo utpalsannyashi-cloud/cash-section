@@ -8,6 +8,8 @@ import type { Group, GroupMember, Session } from '@/types';
 
 type StatusFilter = 'all' | 'open' | 'settled';
 
+const CODE_PATTERN = /^[a-z0-9]{4,20}$/;
+
 export function GroupDashboard() {
   const { groupId } = useParams();
   const { user } = useAuth();
@@ -18,11 +20,14 @@ export function GroupDashboard() {
   const [loading, setLoading] = useState(true);
   const [showNewSession, setShowNewSession] = useState(false);
   const [sessionTitle, setSessionTitle] = useState('');
+  const [customCode, setCustomCode] = useState('');
+  const [codeError, setCodeError] = useState<string | null>(null);
   const [selectedParticipants, setSelectedParticipants] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [search, setSearch] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const isAdmin = members.find((m) => m.user_id === user?.id)?.role === 'admin';
 
@@ -67,15 +72,25 @@ export function GroupDashboard() {
   const handleCreateSession = async (e: FormEvent) => {
     e.preventDefault();
     if (!user || !groupId || selectedParticipants.size === 0) return;
+    setCodeError(null);
+
+    const code = customCode.trim().toLowerCase();
+    if (code && !CODE_PATTERN.test(code)) {
+      setCodeError('Use 4–20 lowercase letters/numbers, e.g. goa2026.');
+      return;
+    }
+
     setBusy(true);
-    const { data: session, error } = await supabase
-      .from('sessions')
-      .insert({ group_id: groupId, title: sessionTitle, created_by: user.id })
-      .select()
-      .single();
+    const payload: Record<string, unknown> = { group_id: groupId, title: sessionTitle, created_by: user.id };
+    if (code) payload.access_code = code;
+
+    const { data: session, error } = await supabase.from('sessions').insert(payload).select().single();
 
     if (error || !session) {
       setBusy(false);
+      setCodeError(
+        error?.message.includes('duplicate') ? 'That passkey is already taken — pick another.' : error?.message ?? 'Could not create session.'
+      );
       return;
     }
 
@@ -85,7 +100,18 @@ export function GroupDashboard() {
 
     setBusy(false);
     setSessionTitle('');
+    setCustomCode('');
     setShowNewSession(false);
+    load();
+  };
+
+  const handleDeleteSession = async (session: Session) => {
+    if (!window.confirm(`Delete "${session.title}"? This permanently removes its expenses and settlement history.`)) {
+      return;
+    }
+    setDeletingId(session.id);
+    await supabase.from('sessions').delete().eq('id', session.id);
+    setDeletingId(null);
     load();
   };
 
@@ -198,6 +224,19 @@ export function GroupDashboard() {
               ))}
             </div>
           </div>
+          <div>
+            <label className="label-eyebrow block mb-1.5">Passkey (optional)</label>
+            <input
+              value={customCode}
+              onChange={(e) => setCustomCode(e.target.value)}
+              className="input-field font-mono"
+              placeholder="Leave blank to auto-generate, e.g. goa2026"
+            />
+            <p className="text-xs text-ink-faint mt-1">
+              Guests use this to unlock the session without an account. 4–20 lowercase letters/numbers.
+            </p>
+            {codeError ? <p className="text-brick text-xs mt-1">{codeError}</p> : null}
+          </div>
           <button type="submit" disabled={busy || selectedParticipants.size === 0} className="btn-primary w-full">
             {busy ? 'Creating…' : 'Start session'}
           </button>
@@ -237,8 +276,8 @@ export function GroupDashboard() {
       ) : (
         <ul className="space-y-2">
           {visibleSessions.map((s) => (
-            <li key={s.id}>
-              <Link to={`/sessions/${s.id}`} className="list-row">
+            <li key={s.id} className="flex items-center gap-2">
+              <Link to={`/sessions/${s.id}`} className="list-row flex-1 min-w-0">
                 <span className="avatar-circle">{s.title.charAt(0)}</span>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium truncate">{s.title}</p>
@@ -254,6 +293,17 @@ export function GroupDashboard() {
                   {s.status}
                 </span>
               </Link>
+              {isAdmin ? (
+                <button
+                  onClick={() => handleDeleteSession(s)}
+                  disabled={deletingId === s.id}
+                  aria-label={`Delete ${s.title}`}
+                  title="Delete session"
+                  className="shrink-0 text-xs px-2.5 py-1.5 rounded-md border border-rule text-ink-faint hover:text-brick hover:border-brick/40 transition-colors"
+                >
+                  {deletingId === s.id ? '…' : 'Delete'}
+                </button>
+              ) : null}
             </li>
           ))}
         </ul>
