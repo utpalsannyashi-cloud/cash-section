@@ -5,6 +5,13 @@
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
+    /* Belt-and-braces alongside the viewport meta tag: some mobile browsers
+       (notably Chrome on Android) still allow pinch-zoom unless touch-action
+       also blocks it. pan-x/pan-y keep normal scrolling working. */
+    touch-action: pan-x pan-y;
+  }
+  body {
+    touch-action: pan-x pan-y;
   }
   ::selection {
     background: theme('colors.emerald.light');
