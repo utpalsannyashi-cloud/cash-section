@@ -7,6 +7,7 @@ import type { Group } from '@/types';
 
 type GroupWithRole = Group & { role: 'admin' | 'member'; member_count: number };
 type Filter = 'all' | 'admin' | 'member';
+type SessionOverview = { id: string; title: string; status: string; group_id: string; group_name: string };
 
 const CODE_PATTERN = /^[a-z0-9]{4,20}$/;
 
@@ -14,6 +15,8 @@ export function Groups() {
   const { user } = useAuth();
   const [groups, setGroups] = useState<GroupWithRole[]>([]);
   const [sessionCounts, setSessionCounts] = useState<{ open: number; settled: number }>({ open: 0, settled: 0 });
+  const [sessionsOverview, setSessionsOverview] = useState<SessionOverview[]>([]);
+  const [expandedPanel, setExpandedPanel] = useState<'open' | 'settled' | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
@@ -54,12 +57,22 @@ export function Groups() {
     if (withCounts.length > 0) {
       const { data: sessions } = await supabase
         .from('sessions')
-        .select('status')
-        .in('group_id', withCounts.map((g) => g.id));
-      const open = (sessions ?? []).filter((s) => s.status === 'open').length;
-      const settled = (sessions ?? []).filter((s) => s.status === 'settled').length;
-      setSessionCounts({ open, settled });
+        .select('id, title, status, group_id')
+        .in('group_id', withCounts.map((g) => g.id))
+        .order('created_at', { ascending: false });
+
+      const withGroupName = (sessions ?? []).map((s) => ({
+        ...s,
+        group_name: withCounts.find((g) => g.id === s.group_id)?.name ?? ''
+      })) as SessionOverview[];
+
+      setSessionsOverview(withGroupName);
+      setSessionCounts({
+        open: withGroupName.filter((s) => s.status === 'open').length,
+        settled: withGroupName.filter((s) => s.status === 'settled').length
+      });
     } else {
+      setSessionsOverview([]);
       setSessionCounts({ open: 0, settled: 0 });
     }
 
@@ -144,27 +157,73 @@ export function Groups() {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <div className="stat-card stat-card-active">
+        <button
+          type="button"
+          onClick={() => setFilter('all')}
+          className={`stat-card stat-card-accent-emerald w-full text-left hover:bg-ink/5 ${filter === 'all' ? 'bg-ink/5' : ''}`}
+        >
           <p className="stat-card-label">Total groups</p>
           <p className="stat-card-value">{groups.length}</p>
           <p className="stat-card-sub">{adminCount} as admin</p>
-        </div>
-        <div className="stat-card">
+        </button>
+        <button
+          type="button"
+          onClick={() => setFilter('admin')}
+          className={`stat-card stat-card-accent-violet w-full text-left hover:bg-ink/5 ${filter === 'admin' ? 'bg-ink/5' : ''}`}
+        >
           <p className="stat-card-label">You administer</p>
           <p className="stat-card-value">{adminCount}</p>
           <p className="stat-card-sub">{memberCount} as member</p>
-        </div>
-        <div className="stat-card">
+        </button>
+        <button
+          type="button"
+          onClick={() => setExpandedPanel((v) => (v === 'open' ? null : 'open'))}
+          className={`stat-card stat-card-accent-amber w-full text-left hover:bg-ink/5 ${expandedPanel === 'open' ? 'bg-ink/5' : ''}`}
+        >
           <p className="stat-card-label">Open sessions</p>
           <p className="stat-card-value">{sessionCounts.open}</p>
           <p className="stat-card-sub">across all groups</p>
-        </div>
-        <div className="stat-card">
+        </button>
+        <button
+          type="button"
+          onClick={() => setExpandedPanel((v) => (v === 'settled' ? null : 'settled'))}
+          className={`stat-card stat-card-accent-neutral w-full text-left hover:bg-ink/5 ${expandedPanel === 'settled' ? 'bg-ink/5' : ''}`}
+        >
           <p className="stat-card-label">Settled sessions</p>
           <p className="stat-card-value">{sessionCounts.settled}</p>
           <p className="stat-card-sub">fully wrapped up</p>
-        </div>
+        </button>
       </div>
+
+      {expandedPanel ? (
+        <div className="receipt-card p-4 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <p className="label-eyebrow">{expandedPanel === 'open' ? 'Open sessions' : 'Settled sessions'}</p>
+            <button onClick={() => setExpandedPanel(null)} className="text-xs text-ink-faint hover:text-ink transition-colors">
+              Close
+            </button>
+          </div>
+          {sessionsOverview.filter((s) => s.status === expandedPanel).length === 0 ? (
+            <p className="text-sm text-ink-soft">No {expandedPanel} sessions yet.</p>
+          ) : (
+            <ul className="space-y-1">
+              {sessionsOverview
+                .filter((s) => s.status === expandedPanel)
+                .map((s) => (
+                  <li key={s.id}>
+                    <Link
+                      to={`/sessions/${s.id}`}
+                      className="flex items-center justify-between gap-2 py-2 px-1 -mx-1 rounded hover:bg-ink/5 transition-colors"
+                    >
+                      <span className="text-sm font-medium truncate">{s.title}</span>
+                      <span className="text-xs text-ink-faint shrink-0">{s.group_name}</span>
+                    </Link>
+                  </li>
+                ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
 
       <div className="flex gap-2 mb-4">
         <button className="btn-primary flex-1" onClick={() => setShowCreate((v) => !v)}>
