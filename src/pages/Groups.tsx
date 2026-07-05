@@ -8,6 +8,8 @@ import type { Group } from '@/types';
 type GroupWithRole = Group & { role: 'admin' | 'member'; member_count: number };
 type Filter = 'all' | 'admin' | 'member';
 
+const CODE_PATTERN = /^[a-z0-9]{4,20}$/;
+
 export function Groups() {
   const { user } = useAuth();
   const [groups, setGroups] = useState<GroupWithRole[]>([]);
@@ -18,6 +20,8 @@ export function Groups() {
   const [showCreate, setShowCreate] = useState(false);
   const [showJoin, setShowJoin] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
+  const [customCode, setCustomCode] = useState('');
+  const [codeError, setCodeError] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -82,17 +86,33 @@ export function Groups() {
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    setBusy(true);
     setError(null);
-    const { error: insertError } = await supabase
-      .from('groups')
-      .insert({ name: newGroupName, created_by: user.id });
+    setCodeError(null);
+
+    const code = customCode.trim().toLowerCase();
+    if (code && !CODE_PATTERN.test(code)) {
+      setCodeError('Use 4–20 lowercase letters/numbers, e.g. goa2026.');
+      return;
+    }
+
+    setBusy(true);
+    const { error: rpcError } = await supabase.rpc('create_group', {
+      p_name: newGroupName,
+      p_access_code: code || null
+    });
     setBusy(false);
-    if (insertError) {
-      setError(insertError.message);
+    if (rpcError) {
+      if (rpcError.message.includes('duplicate') || rpcError.message.includes('already taken')) {
+        setCodeError('That passkey is already taken — pick another.');
+      } else if (rpcError.message.includes('4–20') || rpcError.message.includes('passkey')) {
+        setCodeError(rpcError.message);
+      } else {
+        setError(rpcError.message);
+      }
       return;
     }
     setNewGroupName('');
+    setCustomCode('');
     setShowCreate(false);
     loadGroups();
   };
@@ -157,15 +177,30 @@ export function Groups() {
 
       {showCreate ? (
         <form onSubmit={handleCreate} className="receipt-card p-4 mb-4 space-y-3">
-          <label className="label-eyebrow block">Group name</label>
-          <input
-            required
-            autoFocus
-            value={newGroupName}
-            onChange={(e) => setNewGroupName(e.target.value)}
-            className="input-field"
-            placeholder="Goa Trippers"
-          />
+          <div>
+            <label className="label-eyebrow block mb-1.5">Group name</label>
+            <input
+              required
+              autoFocus
+              value={newGroupName}
+              onChange={(e) => setNewGroupName(e.target.value)}
+              className="input-field"
+              placeholder="Goa Trippers"
+            />
+          </div>
+          <div>
+            <label className="label-eyebrow block mb-1.5">Passkey (optional)</label>
+            <input
+              value={customCode}
+              onChange={(e) => setCustomCode(e.target.value)}
+              className="input-field font-mono"
+              placeholder="Leave blank to auto-generate, e.g. goa2026"
+            />
+            <p className="text-xs text-ink-faint mt-1">
+              Guests use this to unlock your first session without an account. 4–20 lowercase letters/numbers.
+            </p>
+            {codeError ? <p className="text-brick text-xs mt-1">{codeError}</p> : null}
+          </div>
           <button type="submit" disabled={busy} className="btn-primary w-full">
             {busy ? 'Creating…' : 'Create group'}
           </button>
