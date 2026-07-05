@@ -81,6 +81,22 @@
   .stat-card-active {
     @apply border-emerald shadow-glow;
   }
+  /* Colored left-edge accents for clickable stat cards (e.g. the four
+     summary buttons on the Groups page). border-l-4 overrides only the
+     left side's width, leaving the base .stat-card border-rule outline
+     on the other three sides. */
+  .stat-card-accent-emerald {
+    @apply border-l-4 border-l-emerald;
+  }
+  .stat-card-accent-violet {
+    @apply border-l-4 border-l-violet;
+  }
+  .stat-card-accent-amber {
+    @apply border-l-4 border-l-amber;
+  }
+  .stat-card-accent-neutral {
+    @apply border-l-4 border-l-ink-faint;
+  }
   .stat-card-value {
     @apply font-mono text-2xl font-semibold text-ink leading-tight;
   }
