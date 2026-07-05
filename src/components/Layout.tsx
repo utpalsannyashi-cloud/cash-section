@@ -25,17 +25,22 @@ export function Layout({ children, back }: { children: ReactNode; back?: string 
             </Link>
           </div>
           {profile && !isGuest ? (
-            <div className="flex-items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               {isMasterAdmin ? (
                 <Link
                   to="/master"
-                  className="text-[11px] font-mono uppercase tracking-wide px-2 py-1 rounded bg-violet/10 text-violet border border-violet/40 hover:bg-violet/20 transition-colors"
+                  className="text-[11px] font-mono uppercase tracking-wide px-2.5 py-1.5 rounded-md bg-violet/10 text-violet border border-violet/40 hover:bg-violet/20 transition-colors whitespace-nowrap"
                 >
                   Master admin
                 </Link>
               ) : null}
-              <span className="label-eyebrow hidden sm:inline">@{profile.username}</span>
-              <button onClick={() => signOut()} className="text-xs text-ink-faint hover:text-brick transition-colors">
+              <span className="label-eyebrow hidden sm:inline-flex items-center px-2.5 py-1.5 rounded-md bg-ink/5 border border-rule whitespace-nowrap">
+                @{profile.username}
+              </span>
+              <button
+                onClick={() => signOut()}
+                className="text-xs px-2.5 py-1.5 rounded-md border border-rule text-ink-faint hover:text-brick hover:border-brick/40 transition-colors whitespace-nowrap"
+              >
                 Sign out
               </button>
             </div>
