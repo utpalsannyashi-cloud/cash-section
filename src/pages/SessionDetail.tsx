@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
-import { AddExpenseModal, ParticipantLike } from '@/components/AddExpenseModal';
+import { AddExpenseModal, EditingSplit, ParticipantLike } from '@/components/AddExpenseModal';
 import { ExpenseCard } from '@/components/ExpenseCard';
 import { SettlementSummary } from '@/components/SettlementSummary';
 import { supabase } from '@/lib/supabase';
@@ -23,6 +23,8 @@ export function SessionDetail() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [showAdd, setShowAdd] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+  const [editingSplits, setEditingSplits] = useState<EditingSplit[]>([]);
   const [view, setView] = useState<'expenses' | 'settle'>('expenses');
   const [loading, setLoading] = useState(true);
   const [computing, setComputing] = useState(false);
@@ -93,6 +95,18 @@ export function SessionDetail() {
   const handleDeleteExpense = async (id: string) => {
     await supabase.from('expenses').delete().eq('id', id);
     load();
+  };
+
+  const handleEditExpense = async (expense: Expense) => {
+    const { data } = await supabase.from('expense_splits').select('user_id, share').eq('expense_id', expense.id);
+    setEditingSplits((data as EditingSplit[]) ?? []);
+    setEditingExpense(expense);
+  };
+
+  const closeExpenseModal = () => {
+    setShowAdd(false);
+    setEditingExpense(null);
+    setEditingSplits([]);
   };
 
   const handleComputeSettlement = async () => {
@@ -309,6 +323,7 @@ export function SessionDetail() {
                     expense={e}
                     currency={session.currency}
                     canManage={session.status === 'open' && (isAdmin || e.created_by === user?.id)}
+                    onEdit={handleEditExpense}
                     onDelete={handleDeleteExpense}
                   />
                 </li>
@@ -339,16 +354,18 @@ export function SessionDetail() {
         </div>
       )}
 
-      {showAdd && groupId && sessionId && user ? (
+      {(showAdd || editingExpense) && groupId && sessionId && user ? (
         <AddExpenseModal
           groupId={groupId}
           sessionId={sessionId}
           currency={session.currency}
           participants={participants}
           currentUserId={user.id}
-          onClose={() => setShowAdd(false)}
-          onCreated={() => {
-            setShowAdd(false);
+          editingExpense={editingExpense ?? undefined}
+          editingSplits={editingExpense ? editingSplits : undefined}
+          onClose={closeExpenseModal}
+          onSaved={() => {
+            closeExpenseModal();
             load();
           }}
         />
