@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { AddExpenseModal, ParticipantLike } from '@/components/AddExpenseModal';
 import { ExpenseCard } from '@/components/ExpenseCard';
@@ -14,6 +14,7 @@ const CODE_PATTERN = /^[a-z0-9]{4,20}$/;
 
 export function SessionDetail() {
   const { sessionId } = useParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [session, setSession] = useState<Session | null>(null);
   const [groupId, setGroupId] = useState<string | null>(null);
@@ -133,6 +134,15 @@ export function SessionDetail() {
     load();
   };
 
+  const handleDeleteSession = async () => {
+    if (!sessionId || !session) return;
+    if (!window.confirm(`Delete "${session.title}"? This permanently removes its expenses and settlement history.`)) {
+      return;
+    }
+    await supabase.from('sessions').delete().eq('id', sessionId);
+    navigate(groupId ? `/groups/${groupId}` : '/groups', { replace: true });
+  };
+
   const toggleSettlementPaid = async (s: Settlement) => {
     await supabase.from('settlements').update({ is_paid: !s.is_paid }).eq('id', s.id);
     load();
@@ -250,6 +260,18 @@ export function SessionDetail() {
             </button>
           </form>
           {codeError ? <p className="text-brick text-xs">{codeError}</p> : null}
+          <div className="flex items-center justify-between gap-3 pt-2 border-t border-dashed border-rule">
+            <div>
+              <p className="label-eyebrow mb-1">Danger zone</p>
+              <p className="text-xs text-ink-faint">Deletes this session and all its expenses/settlements. Can't be undone.</p>
+            </div>
+            <button
+              onClick={handleDeleteSession}
+              className="text-xs px-2.5 py-1.5 rounded-md border border-brick/40 text-brick hover:bg-brick/10 transition-colors shrink-0"
+            >
+              Delete session
+            </button>
+          </div>
         </div>
       ) : null}
 
