@@ -1,7 +1,7 @@
 import { FormEvent, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { BillUpload } from './BillUpload';
-import type { Category, Profile, SplitType } from '@/types';
+import type { Category, Expense, Profile, SplitType } from '@/types';
 import { formatCurrency } from '@/utils/currency';
 
 const CATEGORIES: Category[] = ['Food', 'Travel', 'Stay', 'Shopping', 'Misc'];
@@ -11,6 +11,11 @@ export interface ParticipantLike {
   profile?: Profile;
 }
 
+export interface EditingSplit {
+  user_id: string;
+  share: number;
+}
+
 interface Props {
   groupId: string;
   sessionId: string;
@@ -18,7 +23,11 @@ interface Props {
   participants: ParticipantLike[]; // members who are part of this session
   currentUserId: string;
   onClose: () => void;
-  onCreated: () => void;
+  onSaved: () => void;
+  /** When provided, the modal edits this expense instead of creating a new one. */
+  editingExpense?: Expense;
+  /** The expense's current per-person splits — required to prefill custom/percentage shares. */
+  editingSplits?: EditingSplit[];
 }
 
 /**
@@ -49,17 +58,40 @@ export function AddExpenseModal({
   participants,
   currentUserId,
   onClose,
-  onCreated
+  onSaved,
+  editingExpense,
+  editingSplits
 }: Props) {
-  const [amount, setAmount] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState<Category>('Food');
-  const [paidBy, setPaidBy] = useState(currentUserId);
-  const [splitType, setSplitType] = useState<SplitType>('equal');
-  const [includedIds, setIncludedIds] = useState<Set<string>>(new Set(participants.map((p) => p.user_id)));
-  const [customShares, setCustomShares] = useState<Record<string, string>>({});
-  const [percentages, setPercentages] = useState<Record<string, string>>({});
-  const [attachmentPath, setAttachmentPath] = useState<string | null>(null);
+  const isEditing = Boolean(editingExpense);
+  const splitsByUser = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const s of editingSplits ?? []) map[s.user_id] = s.share;
+    return map;
+  }, [editingSplits]);
+
+  const [amount, setAmount] = useState(() => (editingExpense ? String(editingExpense.amount) : ''));
+  const [description, setDescription] = useState(() => editingExpense?.description ?? '');
+  const [category, setCategory] = useState<Category>(() => editingExpense?.category ?? 'Food');
+  const [paidBy, setPaidBy] = useState(() => editingExpense?.paid_by ?? currentUserId);
+  const [splitType, setSplitType] = useState<SplitType>(() => editingExpense?.split_type ?? 'equal');
+  const [includedIds, setIncludedIds] = useState<Set<string>>(
+    () => new Set(editingSplits ? editingSplits.map((s) => s.user_id) : participants.map((p) => p.user_id))
+  );
+  const [customShares, setCustomShares] = useState<Record<string, string>>(() => {
+    if (!editingExpense || editingExpense.split_type !== 'custom') return {};
+    const init: Record<string, string> = {};
+    for (const [userId, share] of Object.entries(splitsByUser)) init[userId] = String(share);
+    return init;
+  });
+  const [percentages, setPercentages] = useState<Record<string, string>>(() => {
+    if (!editingExpense || editingExpense.split_type !== 'percentage' || editingExpense.amount <= 0) return {};
+    const init: Record<string, string> = {};
+    for (const [userId, share] of Object.entries(splitsByUser)) {
+      init[userId] = ((share / editingExpense.amount) * 100).toFixed(2).replace(/\.?0+$/, '');
+    }
+    return init;
+  });
+  const [attachmentPath, setAttachmentPath] = useState<string | null>(editingExpense?.attachment_path ?? null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -132,6 +164,28 @@ export function AddExpenseModal({
     }
 
     setBusy(true);
+
+    if (isEditing && editingExpense) {
+      const { error: rpcError } = await supabase.rpc('update_expense', {
+        p_expense_id: editingExpense.id,
+        p_description: description,
+        p_amount: numericAmount,
+        p_category: category,
+        p_paid_by: paidBy,
+        p_split_type: splitType,
+        p_attachment_path: attachmentPath,
+        p_splits: Object.entries(shares).map(([userId, share]) => ({ user_id: userId, share }))
+      });
+
+      setBusy(false);
+      if (rpcError) {
+        setError(rpcError.message);
+        return;
+      }
+      onSaved();
+      return;
+    }
+
     const { data: expense, error: expenseError } = await supabase
       .from('expenses')
       .insert({
@@ -168,14 +222,14 @@ export function AddExpenseModal({
       return;
     }
 
-    onCreated();
+    onSaved();
   };
 
   return (
     <div className="fixed inset-0 bg-ink/40 flex items-end sm:items-center justify-center z-20 p-0 sm:p-4">
       <div className="bg-paper w-full sm:max-w-md sm:rounded-lg rounded-t-2xl max-h-[90vh] overflow-y-auto">
         <div className="p-5 border-b border-rule flex items-center justify-between">
-          <h2 className="font-mono font-semibold">Add expense</h2>
+          <h2 className="font-mono font-semibold">{isEditing ? 'Edit expense' : 'Add expense'}</h2>
           <button onClick={onClose} className="text-ink-faint hover:text-ink text-xl leading-none">
             ×
           </button>
@@ -306,7 +360,7 @@ export function AddExpenseModal({
           {error ? <p className="text-brick text-sm">{error}</p> : null}
 
           <button type="submit" disabled={busy} className="btn-primary w-full">
-            {busy ? 'Saving…' : 'Add expense'}
+            {busy ? 'Saving…' : isEditing ? 'Save changes' : 'Add expense'}
           </button>
         </form>
       </div>
