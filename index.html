@@ -2,10 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover"
-    />
+    <!--
+      Deliberately NOT using maximum-scale=1/user-scalable=no here: those
+      attributes are known to break normal touch-scrolling on a range of
+      mobile browsers (the page gets "stuck" and won't scroll to the
+      bottom). Pinch-zoom is instead blocked purely via the touch-action
+      CSS rule in src/index.css, which doesn't have that side effect.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0F172A" />
     <meta name="description" content="Split bills and settle up with your group, on the spot." />
     <link rel="icon" href="/icons/icon-192.png" />
