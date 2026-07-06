@@ -13,15 +13,15 @@ export function Browse() {
     if (!code.trim()) return;
     setBusy(true);
     setError(null);
-    const { data, error: rpcError } = await supabase.rpc('unlock_session_by_code', {
+    const { data, error: rpcError } = await supabase.rpc('unlock_group_by_code', {
       code: code.trim()
     });
     setBusy(false);
     if (rpcError || !data) {
-      setError("That passkey doesn't match any session. Double-check with whoever shared it.");
+      setError("That passkey doesn't match any group. Double-check with whoever shared it.");
       return;
     }
-    navigate(`/sessions/${data}`);
+    navigate(`/groups/${data}`);
   };
 
   return (
@@ -35,10 +35,10 @@ export function Browse() {
             Cash<span className="text-emerald">§</span>ection
           </h1>
           <p className="text-ink-soft text-sm mt-2 mb-6">
-            Ask whoever's organizing the trip for their session's passkey to jump straight in — no account needed.
+            Ask whoever's organizing the trip for their group's passkey to jump straight in — no account needed.
           </p>
           <form onSubmit={handleUnlock} className="space-y-3 text-left">
-            <label className="label-eyebrow block">Session passkey</label>
+            <label className="label-eyebrow block">Group passkey</label>
             <input
               required
               autoFocus
@@ -49,7 +49,7 @@ export function Browse() {
             />
             {error ? <p className="text-brick text-sm">{error}</p> : null}
             <button type="submit" disabled={busy} className="btn-primary w-full">
-              {busy ? 'Unlocking…' : 'Unlock session'}
+              {busy ? 'Unlocking…' : 'Unlock group'}
             </button>
           </form>
         </div>
