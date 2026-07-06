@@ -15,6 +15,7 @@ export interface Group {
   name: string;
   created_by: string;
   invite_code: string;
+  access_code: string;
   created_at: string;
 }
 
