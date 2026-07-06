@@ -3,14 +3,6 @@ import { supabase } from '@/lib/supabase';
 import { formatCurrency } from '@/utils/currency';
 import type { Expense } from '@/types';
 
-const CATEGORY_ICON: Record<string, string> = {
-  Food: '🍽',
-  Travel: '🚗',
-  Stay: '🛏',
-  Shopping: '🛍',
-  Misc: '•'
-};
-
 export function ExpenseCard({
   expense,
   currency,
@@ -45,7 +37,7 @@ export function ExpenseCard({
   return (
     <div className="receipt-card p-4 flex items-start gap-3">
       <span className="avatar-circle text-base" aria-hidden>
-        {CATEGORY_ICON[expense.category] ?? '•'}
+        {expense.payer?.username?.charAt(0)?.toUpperCase() ?? '•'}
       </span>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
@@ -56,9 +48,8 @@ export function ExpenseCard({
         </div>
         <div className="flex items-center justify-between mt-1.5">
           <p className="text-xs text-ink-faint">
-            Paid by <span className="text-ink-soft font-medium">@{expense.payer?.username}</span> ·{' '}
-            {new Date(expense.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} ·{' '}
-            <span className="uppercase tracking-wide">{expense.category}</span>
+            Added by <span className="text-ink-soft font-medium">@{expense.payer?.username}</span> ·{' '}
+            {new Date(expense.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
           </p>
           <div className="flex items-center gap-3 shrink-0">
             {expense.attachment_path ? (
