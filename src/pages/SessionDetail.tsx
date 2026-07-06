@@ -1,7 +1,7 @@
-import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
-import { AddExpenseModal, EditingSplit, ParticipantLike } from '@/components/AddExpenseModal';
+import { AddExpenseModal, ParticipantLike } from '@/components/AddExpenseModal';
 import { ExpenseCard } from '@/components/ExpenseCard';
 import { SettlementSummary } from '@/components/SettlementSummary';
 import { supabase } from '@/lib/supabase';
@@ -10,11 +10,12 @@ import { deriveTotals, simplifyDebts } from '@/utils/settlement';
 import { formatCurrency } from '@/utils/currency';
 import type { Expense, Session, Settlement } from '@/types';
 
-const CODE_PATTERN = /^[a-z0-9]{4,20}$/;
-
+// NOTE: individual sessions are no longer a user-facing concept - see
+// GroupDashboard.tsx, which now owns the group's whole shared ledger
+// (passkey included). This page is kept only so a legacy /sessions/:id
+// link still resolves to something useful instead of a dead end.
 export function SessionDetail() {
   const { sessionId } = useParams();
-  const navigate = useNavigate();
   const { user } = useAuth();
   const [session, setSession] = useState<Session | null>(null);
   const [groupId, setGroupId] = useState<string | null>(null);
@@ -24,15 +25,9 @@ export function SessionDetail() {
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [showAdd, setShowAdd] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
-  const [editingSplits, setEditingSplits] = useState<EditingSplit[]>([]);
   const [view, setView] = useState<'expenses' | 'settle'>('expenses');
   const [loading, setLoading] = useState(true);
   const [computing, setComputing] = useState(false);
-  const [copiedCode, setCopiedCode] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
-  const [customCode, setCustomCode] = useState('');
-  const [savingCode, setSavingCode] = useState(false);
-  const [codeError, setCodeError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!sessionId || !user) return;
@@ -97,16 +92,13 @@ export function SessionDetail() {
     load();
   };
 
-  const handleEditExpense = async (expense: Expense) => {
-    const { data } = await supabase.from('expense_splits').select('user_id, share').eq('expense_id', expense.id);
-    setEditingSplits((data as EditingSplit[]) ?? []);
+  const handleEditExpense = (expense: Expense) => {
     setEditingExpense(expense);
   };
 
   const closeExpenseModal = () => {
     setShowAdd(false);
     setEditingExpense(null);
-    setEditingSplits([]);
   };
 
   const handleComputeSettlement = async () => {
@@ -142,60 +134,8 @@ export function SessionDetail() {
     load();
   };
 
-  const handleCloseSession = async () => {
-    if (!sessionId) return;
-    await supabase.from('sessions').update({ status: 'settled', settled_at: new Date().toISOString() }).eq('id', sessionId);
-    load();
-  };
-
-  const handleDeleteSession = async () => {
-    if (!sessionId || !session) return;
-    if (!window.confirm(`Delete "${session.title}"? This permanently removes its expenses and settlement history.`)) {
-      return;
-    }
-    await supabase.from('sessions').delete().eq('id', sessionId);
-    navigate(groupId ? `/groups/${groupId}` : '/groups', { replace: true });
-  };
-
   const toggleSettlementPaid = async (s: Settlement) => {
     await supabase.from('settlements').update({ is_paid: !s.is_paid }).eq('id', s.id);
-    load();
-  };
-
-  const copyAccessCode = async () => {
-    if (!session) return;
-    await navigator.clipboard.writeText(session.access_code);
-    setCopiedCode(true);
-    setTimeout(() => setCopiedCode(false), 1500);
-  };
-
-  const regenerateAccessCode = async () => {
-    if (!sessionId) return;
-    setRegenerating(true);
-    setCodeError(null);
-    const newCode = Math.random().toString(36).slice(2, 8);
-    await supabase.from('sessions').update({ access_code: newCode }).eq('id', sessionId);
-    setRegenerating(false);
-    load();
-  };
-
-  const handleSetCustomCode = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!sessionId) return;
-    const code = customCode.trim().toLowerCase();
-    if (!CODE_PATTERN.test(code)) {
-      setCodeError('Use 4–20 lowercase letters/numbers, e.g. goa2026.');
-      return;
-    }
-    setSavingCode(true);
-    setCodeError(null);
-    const { error } = await supabase.from('sessions').update({ access_code: code }).eq('id', sessionId);
-    setSavingCode(false);
-    if (error) {
-      setCodeError(error.message.includes('duplicate') ? 'That passkey is already taken — pick another.' : error.message);
-      return;
-    }
-    setCustomCode('');
     load();
   };
 
@@ -244,50 +184,9 @@ export function SessionDetail() {
         </div>
       </div>
 
-      {isAdmin ? (
-        <div className="receipt-card p-4 mb-5 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="label-eyebrow mb-1">Session passkey</p>
-              <button onClick={copyAccessCode} className="font-mono text-sm text-emerald hover:underline">
-                {copiedCode ? 'Copied!' : session.access_code}
-              </button>
-              <p className="text-xs text-ink-faint mt-1">Share this verbally or by message so your group can unlock this session.</p>
-            </div>
-            <button
-              onClick={regenerateAccessCode}
-              disabled={regenerating}
-              className="text-xs text-ink-faint hover:text-brick transition-colors shrink-0"
-            >
-              {regenerating ? 'Regenerating…' : 'Random'}
-            </button>
-          </div>
-          <form onSubmit={handleSetCustomCode} className="flex items-center gap-2 pt-2 border-t border-dashed border-rule">
-            <input
-              value={customCode}
-              onChange={(e) => setCustomCode(e.target.value)}
-              className="input-field font-mono flex-1"
-              placeholder="Set your own, e.g. goa2026"
-            />
-            <button type="submit" disabled={savingCode || !customCode.trim()} className="btn-secondary shrink-0">
-              {savingCode ? 'Saving…' : 'Set'}
-            </button>
-          </form>
-          {codeError ? <p className="text-brick text-xs">{codeError}</p> : null}
-          <div className="flex items-center justify-between gap-3 pt-2 border-t border-dashed border-rule">
-            <div>
-              <p className="label-eyebrow mb-1">Danger zone</p>
-              <p className="text-xs text-ink-faint">Deletes this session and all its expenses/settlements. Can't be undone.</p>
-            </div>
-            <button
-              onClick={handleDeleteSession}
-              className="text-xs px-2.5 py-1.5 rounded-md border border-brick/40 text-brick hover:bg-brick/10 transition-colors shrink-0"
-            >
-              Delete session
-            </button>
-          </div>
-        </div>
-      ) : null}
+      <p className="text-xs text-ink-faint mb-5">
+        Manage this group's passkey, and delete/settle options, from the group page instead.
+      </p>
 
       <div className="tab-bar">
         <button
@@ -346,23 +245,16 @@ export function SessionDetail() {
             onTogglePaid={toggleSettlementPaid}
           />
 
-          {isAdmin && session.status === 'open' && settlements.length > 0 ? (
-            <button onClick={handleCloseSession} className="btn-secondary w-full">
-              Close session
-            </button>
-          ) : null}
         </div>
       )}
 
-      {(showAdd || editingExpense) && groupId && sessionId && user ? (
+      {(showAdd || editingExpense) && sessionId && user ? (
         <AddExpenseModal
-          groupId={groupId}
           sessionId={sessionId}
           currency={session.currency}
           participants={participants}
           currentUserId={user.id}
           editingExpense={editingExpense ?? undefined}
-          editingSplits={editingExpense ? editingSplits : undefined}
           onClose={closeExpenseModal}
           onSaved={() => {
             closeExpenseModal();
