@@ -26,7 +26,7 @@ export default function App() {
       <Route
         path="/groups/:groupId"
         element={
-          <ProtectedRoute requireFull>
+          <ProtectedRoute>
             <GroupDashboard />
           </ProtectedRoute>
         }
