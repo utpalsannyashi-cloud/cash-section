@@ -1,10 +1,7 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { BillUpload } from './BillUpload';
-import type { Category, Expense, Profile, SplitType } from '@/types';
+import type { Expense, Profile } from '@/types';
 import { formatCurrency } from '@/utils/currency';
-
-const CATEGORIES: Category[] = ['Food', 'Travel', 'Stay', 'Shopping', 'Misc'];
 
 export interface ParticipantLike {
   user_id: string;
@@ -17,21 +14,18 @@ export interface EditingSplit {
 }
 
 interface Props {
-  groupId: string;
   sessionId: string;
   currency: string;
-  participants: ParticipantLike[]; // members who are part of this session
+  participants: ParticipantLike[]; // everyone the expense is split across (all current group members)
   currentUserId: string;
   onClose: () => void;
   onSaved: () => void;
   /** When provided, the modal edits this expense instead of creating a new one. */
   editingExpense?: Expense;
-  /** The expense's current per-person splits — required to prefill custom/percentage shares. */
-  editingSplits?: EditingSplit[];
 }
 
 /**
- * Splits `totalRupees` evenly across `count` people, in integer paise,
+ * Splits totalRupees evenly across count people, in integer paise,
  * distributing any leftover cent(s) to the first few people so the sum
  * always matches exactly (required by the DB's split-sum trigger).
  */
@@ -51,70 +45,30 @@ function splitEqually(totalRupees: number, ids: string[]): Record<string, number
   return result;
 }
 
+/**
+ * Kept intentionally minimal: just what it was for and how much. Every
+ * expense is split evenly across the whole group automatically — no
+ * category, payer picker, custom splits, or bill upload to fuss over
+ * while everyone's still at the table. The full settle-up math still
+ * runs later from the "Split up" button.
+ */
 export function AddExpenseModal({
-  groupId,
   sessionId,
   currency,
   participants,
   currentUserId,
   onClose,
   onSaved,
-  editingExpense,
-  editingSplits
+  editingExpense
 }: Props) {
   const isEditing = Boolean(editingExpense);
-  const splitsByUser = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const s of editingSplits ?? []) map[s.user_id] = s.share;
-    return map;
-  }, [editingSplits]);
 
   const [amount, setAmount] = useState(() => (editingExpense ? String(editingExpense.amount) : ''));
   const [description, setDescription] = useState(() => editingExpense?.description ?? '');
-  const [category, setCategory] = useState<Category>(() => editingExpense?.category ?? 'Food');
-  const [paidBy, setPaidBy] = useState(() => editingExpense?.paid_by ?? currentUserId);
-  const [splitType, setSplitType] = useState<SplitType>(() => editingExpense?.split_type ?? 'equal');
-  const [includedIds, setIncludedIds] = useState<Set<string>>(
-    () => new Set(editingSplits ? editingSplits.map((s) => s.user_id) : participants.map((p) => p.user_id))
-  );
-  const [customShares, setCustomShares] = useState<Record<string, string>>(() => {
-    if (!editingExpense || editingExpense.split_type !== 'custom') return {};
-    const init: Record<string, string> = {};
-    for (const [userId, share] of Object.entries(splitsByUser)) init[userId] = String(share);
-    return init;
-  });
-  const [percentages, setPercentages] = useState<Record<string, string>>(() => {
-    if (!editingExpense || editingExpense.split_type !== 'percentage' || editingExpense.amount <= 0) return {};
-    const init: Record<string, string> = {};
-    for (const [userId, share] of Object.entries(splitsByUser)) {
-      init[userId] = ((share / editingExpense.amount) * 100).toFixed(2).replace(/\.?0+$/, '');
-    }
-    return init;
-  });
-  const [attachmentPath, setAttachmentPath] = useState<string | null>(editingExpense?.attachment_path ?? null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const numericAmount = parseFloat(amount) || 0;
-  const includedList = participants.filter((p) => includedIds.has(p.user_id));
-
-  const toggleIncluded = (userId: string) => {
-    setIncludedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(userId)) next.delete(userId);
-      else next.add(userId);
-      return next;
-    });
-  };
-
-  const customTotal = useMemo(
-    () => includedList.reduce((sum, p) => sum + (parseFloat(customShares[p.user_id]) || 0), 0),
-    [customShares, includedList]
-  );
-  const percentageTotal = useMemo(
-    () => includedList.reduce((sum, p) => sum + (parseFloat(percentages[p.user_id]) || 0), 0),
-    [percentages, includedList]
-  );
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -124,44 +78,15 @@ export function AddExpenseModal({
       setError('Enter an amount greater than zero.');
       return;
     }
-    if (includedList.length === 0) {
-      setError('Select at least one person to split with.');
+    if (participants.length === 0) {
+      setError('This group has no members to split with yet.');
       return;
     }
 
-    let shares: Record<string, number>;
-
-    if (splitType === 'equal') {
-      shares = splitEqually(numericAmount, includedList.map((p) => p.user_id));
-    } else if (splitType === 'custom') {
-      if (Math.abs(customTotal - numericAmount) > 0.01) {
-        setError(`Custom shares (${formatCurrency(customTotal, currency)}) must add up to the total (${formatCurrency(numericAmount, currency)}).`);
-        return;
-      }
-      shares = {};
-      for (const p of includedList) shares[p.user_id] = parseFloat(customShares[p.user_id]) || 0;
-    } else {
-      if (Math.abs(percentageTotal - 100) > 0.01) {
-        setError(`Percentages add up to ${percentageTotal.toFixed(1)}%, they need to total 100%.`);
-        return;
-      }
-      // Convert percentages to cents with remainder distributed, so the sum
-      // matches the amount exactly despite rounding.
-      const totalCents = Math.round(numericAmount * 100);
-      let assignedCents = 0;
-      shares = {};
-      includedList.forEach((p, idx) => {
-        const pct = parseFloat(percentages[p.user_id]) || 0;
-        let cents: number;
-        if (idx === includedList.length - 1) {
-          cents = totalCents - assignedCents; // last person absorbs rounding remainder
-        } else {
-          cents = Math.round((pct / 100) * totalCents);
-          assignedCents += cents;
-        }
-        shares[p.user_id] = cents / 100;
-      });
-    }
+    const shares = splitEqually(
+      numericAmount,
+      participants.map((p) => p.user_id)
+    );
 
     setBusy(true);
 
@@ -170,10 +95,10 @@ export function AddExpenseModal({
         p_expense_id: editingExpense.id,
         p_description: description,
         p_amount: numericAmount,
-        p_category: category,
-        p_paid_by: paidBy,
-        p_split_type: splitType,
-        p_attachment_path: attachmentPath,
+        p_category: editingExpense.category,
+        p_paid_by: editingExpense.paid_by,
+        p_split_type: 'equal',
+        p_attachment_path: editingExpense.attachment_path,
         p_splits: Object.entries(shares).map(([userId, share]) => ({ user_id: userId, share }))
       });
 
@@ -190,12 +115,12 @@ export function AddExpenseModal({
       .from('expenses')
       .insert({
         session_id: sessionId,
-        paid_by: paidBy,
+        paid_by: currentUserId,
         amount: numericAmount,
         description,
-        category,
-        split_type: splitType,
-        attachment_path: attachmentPath,
+        category: 'Misc',
+        split_type: 'equal',
+        attachment_path: null,
         created_by: currentUserId
       })
       .select()
@@ -247,115 +172,27 @@ export function AddExpenseModal({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="label-eyebrow block mb-1.5">Amount</label>
-              <input
-                required
-                type="number"
-                step="0.01"
-                min="0.01"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="input-field font-mono"
-                placeholder="0.00"
-              />
-            </div>
-            <div>
-              <label className="label-eyebrow block mb-1.5">Category</label>
-              <select value={category} onChange={(e) => setCategory(e.target.value as Category)} className="input-field">
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
           <div>
-            <label className="label-eyebrow block mb-1.5">Paid by</label>
-            <select value={paidBy} onChange={(e) => setPaidBy(e.target.value)} className="input-field">
-              {participants.map((p) => (
-                <option key={p.user_id} value={p.user_id}>
-                  @{p.profile?.username}
-                </option>
-              ))}
-            </select>
+            <label className="label-eyebrow block mb-1.5">Amount</label>
+            <input
+              required
+              type="number"
+              step="0.01"
+              min="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="input-field font-mono"
+              placeholder="0.00"
+            />
           </div>
 
-          <div>
-            <label className="label-eyebrow block mb-1.5">Split</label>
-            <div className="flex gap-2 mb-3">
-              {(['equal', 'custom', 'percentage'] as SplitType[]).map((t) => (
-                <button
-                  type="button"
-                  key={t}
-                  onClick={() => setSplitType(t)}
-                  className={`flex-1 text-xs py-2 rounded border transition-colors capitalize ${
-                    splitType === t ? 'bg-emerald text-paper border-emerald' : 'border-ink/20 text-ink-soft'
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-
-            <div className="space-y-2">
-              {participants.map((p) => {
-                const included = includedIds.has(p.user_id);
-                return (
-                  <div key={p.user_id} className="ledger-row">
-                    <button
-                      type="button"
-                      onClick={() => toggleIncluded(p.user_id)}
-                      className={`text-xs shrink-0 ${included ? 'text-ink' : 'text-ink-faint line-through'}`}
-                    >
-                      @{p.profile?.username}
-                    </button>
-                    <span className="ledger-fill" />
-                    {splitType === 'equal' ? (
-                      <span className="ledger-amount text-xs text-ink-soft">
-                        {included && includedList.length > 0
-                          ? formatCurrency(splitEqually(numericAmount, includedList.map((x) => x.user_id))[p.user_id] ?? 0, currency)
-                          : '—'}
-                      </span>
-                    ) : splitType === 'custom' ? (
-                      <input
-                        type="number"
-                        step="0.01"
-                        disabled={!included}
-                        value={customShares[p.user_id] ?? ''}
-                        onChange={(e) => setCustomShares((s) => ({ ...s, [p.user_id]: e.target.value }))}
-                        className="w-20 bg-transparent font-mono text-xs text-right border-b border-rule focus:border-emerald outline-none disabled:opacity-30"
-                        placeholder="0.00"
-                      />
-                    ) : (
-                      <input
-                        type="number"
-                        step="1"
-                        disabled={!included}
-                        value={percentages[p.user_id] ?? ''}
-                        onChange={(e) => setPercentages((s) => ({ ...s, [p.user_id]: e.target.value }))}
-                        className="w-16 bg-transparent font-mono text-xs text-right border-b border-rule focus:border-emerald outline-none disabled:opacity-30"
-                        placeholder="0%"
-                      />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            {splitType === 'custom' ? (
-              <p className="text-xs text-ink-faint mt-2">
-                {formatCurrency(customTotal, currency)} of {formatCurrency(numericAmount, currency)} allocated
-              </p>
-            ) : null}
-            {splitType === 'percentage' ? (
-              <p className="text-xs text-ink-faint mt-2">{percentageTotal.toFixed(1)}% of 100% allocated</p>
-            ) : null}
-          </div>
-
-          <BillUpload groupId={groupId} sessionId={sessionId} value={attachmentPath} onUploaded={setAttachmentPath} />
+          <p className="text-xs text-ink-faint">
+            Split evenly across all {participants.length} group member{participants.length === 1 ? '' : 's'}
+            {numericAmount > 0 && participants.length > 0
+              ? ` — ${formatCurrency(numericAmount / participants.length, currency)} each`
+              : ''}
+            .
+          </p>
 
           {error ? <p className="text-brick text-sm">{error}</p> : null}
 
