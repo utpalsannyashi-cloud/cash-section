@@ -3,20 +3,21 @@ import { Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
+import { formatCurrency } from '@/utils/currency';
 import type { Group } from '@/types';
 
 type GroupWithRole = Group & { role: 'admin' | 'member'; member_count: number };
 type Filter = 'all' | 'admin' | 'member';
-type SessionOverview = { id: string; title: string; status: string; group_id: string; group_name: string };
+type ExpenseOverview = { id: string; description: string; amount: number; group_id: string; group_name: string; created_at: string };
 
 const CODE_PATTERN = /^[a-z0-9]{4,20}$/;
 
 export function Groups() {
   const { user } = useAuth();
   const [groups, setGroups] = useState<GroupWithRole[]>([]);
-  const [sessionCounts, setSessionCounts] = useState<{ open: number; settled: number }>({ open: 0, settled: 0 });
-  const [sessionsOverview, setSessionsOverview] = useState<SessionOverview[]>([]);
-  const [expandedPanel, setExpandedPanel] = useState<'open' | 'settled' | null>(null);
+  const [expenseTotals, setExpenseTotals] = useState<{ count: number; spend: number }>({ count: 0, spend: 0 });
+  const [expensesOverview, setExpensesOverview] = useState<ExpenseOverview[]>([]);
+  const [expandedPanel, setExpandedPanel] = useState<'count' | 'spend' | null>(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
@@ -55,25 +56,47 @@ export function Groups() {
     setGroups(withCounts);
 
     if (withCounts.length > 0) {
+      // Expenses hang off a session row internally, but that's no longer a
+      // user-facing concept — so pull every session under these groups just
+      // to map expenses back to a group id/name for the overview below.
       const { data: sessions } = await supabase
         .from('sessions')
-        .select('id, title, status, group_id')
-        .in('group_id', withCounts.map((g) => g.id))
-        .order('created_at', { ascending: false });
+        .select('id, group_id')
+        .in('group_id', withCounts.map((g) => g.id));
+      const sessionIds = (sessions ?? []).map((s) => s.id);
+      const groupIdForSession = new Map((sessions ?? []).map((s) => [s.id, s.group_id]));
 
-      const withGroupName = (sessions ?? []).map((s) => ({
-        ...s,
-        group_name: withCounts.find((g) => g.id === s.group_id)?.name ?? ''
-      })) as SessionOverview[];
+      if (sessionIds.length > 0) {
+        const { data: exp } = await supabase
+          .from('expenses')
+          .select('id, description, amount, created_at, session_id')
+          .in('session_id', sessionIds)
+          .order('created_at', { ascending: false });
 
-      setSessionsOverview(withGroupName);
-      setSessionCounts({
-        open: withGroupName.filter((s) => s.status === 'open').length,
-        settled: withGroupName.filter((s) => s.status === 'settled').length
-      });
+        const withGroupName = (exp ?? []).map((e) => {
+          const gid = groupIdForSession.get(e.session_id) ?? '';
+          return {
+            id: e.id,
+            description: e.description,
+            amount: Number(e.amount),
+            created_at: e.created_at,
+            group_id: gid,
+            group_name: withCounts.find((g) => g.id === gid)?.name ?? ''
+          };
+        }) as ExpenseOverview[];
+
+        setExpensesOverview(withGroupName);
+        setExpenseTotals({
+          count: withGroupName.length,
+          spend: withGroupName.reduce((sum, e) => sum + e.amount, 0)
+        });
+      } else {
+        setExpensesOverview([]);
+        setExpenseTotals({ count: 0, spend: 0 });
+      }
     } else {
-      setSessionsOverview([]);
-      setSessionCounts({ open: 0, settled: 0 });
+      setExpensesOverview([]);
+      setExpenseTotals({ count: 0, spend: 0 });
     }
 
     setLoading(false);
@@ -177,49 +200,49 @@ export function Groups() {
         </button>
         <button
           type="button"
-          onClick={() => setExpandedPanel((v) => (v === 'open' ? null : 'open'))}
-          className={`stat-card stat-card-accent-amber w-full text-left hover:bg-ink/5 ${expandedPanel === 'open' ? 'bg-ink/5' : ''}`}
+          onClick={() => setExpandedPanel((v) => (v === 'count' ? null : 'count'))}
+          className={`stat-card stat-card-accent-amber w-full text-left hover:bg-ink/5 ${expandedPanel === 'count' ? 'bg-ink/5' : ''}`}
         >
-          <p className="stat-card-label">Open sessions</p>
-          <p className="stat-card-value">{sessionCounts.open}</p>
+          <p className="stat-card-label">Total expenses</p>
+          <p className="stat-card-value">{expenseTotals.count}</p>
           <p className="stat-card-sub">across all groups</p>
         </button>
         <button
           type="button"
-          onClick={() => setExpandedPanel((v) => (v === 'settled' ? null : 'settled'))}
-          className={`stat-card stat-card-accent-neutral w-full text-left hover:bg-ink/5 ${expandedPanel === 'settled' ? 'bg-ink/5' : ''}`}
+          onClick={() => setExpandedPanel((v) => (v === 'spend' ? null : 'spend'))}
+          className={`stat-card stat-card-accent-neutral w-full text-left hover:bg-ink/5 ${expandedPanel === 'spend' ? 'bg-ink/5' : ''}`}
         >
-          <p className="stat-card-label">Settled sessions</p>
-          <p className="stat-card-value">{sessionCounts.settled}</p>
-          <p className="stat-card-sub">fully wrapped up</p>
+          <p className="stat-card-label">Total spend</p>
+          <p className="stat-card-value text-lg">{formatCurrency(expenseTotals.spend, 'INR')}</p>
+          <p className="stat-card-sub">logged so far</p>
         </button>
       </div>
 
       {expandedPanel ? (
         <div className="receipt-card p-4 mb-6">
           <div className="flex items-center justify-between mb-3">
-            <p className="label-eyebrow">{expandedPanel === 'open' ? 'Open sessions' : 'Settled sessions'}</p>
+            <p className="label-eyebrow">Recent expenses</p>
             <button onClick={() => setExpandedPanel(null)} className="text-xs text-ink-faint hover:text-ink transition-colors">
               Close
             </button>
           </div>
-          {sessionsOverview.filter((s) => s.status === expandedPanel).length === 0 ? (
-            <p className="text-sm text-ink-soft">No {expandedPanel} sessions yet.</p>
+          {expensesOverview.length === 0 ? (
+            <p className="text-sm text-ink-soft">No expenses logged yet.</p>
           ) : (
             <ul className="space-y-1">
-              {sessionsOverview
-                .filter((s) => s.status === expandedPanel)
-                .map((s) => (
-                  <li key={s.id}>
-                    <Link
-                      to={`/sessions/${s.id}`}
-                      className="flex items-center justify-between gap-2 py-2 px-1 -mx-1 rounded hover:bg-ink/5 transition-colors"
-                    >
-                      <span className="text-sm font-medium truncate">{s.title}</span>
-                      <span className="text-xs text-ink-faint shrink-0">{s.group_name}</span>
-                    </Link>
-                  </li>
-                ))}
+              {expensesOverview.slice(0, 10).map((e) => (
+                <li key={e.id}>
+                  <Link
+                    to={`/groups/${e.group_id}`}
+                    className="flex items-center justify-between gap-2 py-2 px-1 -mx-1 rounded hover:bg-ink/5 transition-colors"
+                  >
+                    <span className="text-sm font-medium truncate">{e.description}</span>
+                    <span className="text-xs text-ink-faint shrink-0">
+                      {formatCurrency(e.amount, 'INR')} · {e.group_name}
+                    </span>
+                  </Link>
+                </li>
+              ))}
             </ul>
           )}
         </div>
@@ -256,7 +279,7 @@ export function Groups() {
               placeholder="Leave blank to auto-generate, e.g. goa2026"
             />
             <p className="text-xs text-ink-faint mt-1">
-              Guests use this to unlock your first session without an account. 4–20 lowercase letters/numbers.
+              Guests use this to unlock the whole group without an account. 4–20 lowercase letters/numbers.
             </p>
             {codeError ? <p className="text-brick text-xs mt-1">{codeError}</p> : null}
           </div>
