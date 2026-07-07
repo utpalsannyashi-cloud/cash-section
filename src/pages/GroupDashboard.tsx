@@ -13,13 +13,13 @@ import type { Expense, Group, GroupMember, Settlement } from '@/types';
 const CODE_PATTERN = /^[a-z0-9]{4,20}$/;
 
 /**
- * A group is now just one continuous shared ledger - there's no more
+ * A group is now just one continuous shared ledger — there's no more
  * user-facing concept of "sessions". Under the hood, expenses still
  * hang off a session row (schema left as-is to avoid a risky data
  * migration), but this page transparently aggregates every session
  * that belongs to the group into a single view, and always writes new
  * expenses to the earliest ("primary") one. Nobody sees a session list,
- * a "+ New session" button, or a per-session passkey anymore - the
+ * a "+ New session" button, or a per-session passkey anymore — the
  * passkey now lives on the group itself (see Browse.tsx).
  */
 export function GroupDashboard() {
@@ -282,59 +282,65 @@ export function GroupDashboard() {
       </div>
 
       <div className="grid grid-cols-3 gap-3 mb-5">
-        <div className="stat-card stat-card-active">
+        <div className="stat-card stat-card-accent-emerald">
           <p className="stat-card-label">Total spend</p>
           <p className="stat-card-value text-lg">{formatCurrency(totalSpend, currency)}</p>
         </div>
-        <div className="stat-card">
+        <div className="stat-card stat-card-accent-violet">
           <p className="stat-card-label">Expenses</p>
           <p className="stat-card-value">{expenses.length}</p>
         </div>
-        <div className="stat-card">
+        <div className="stat-card stat-card-accent-amber">
           <p className="stat-card-label">Members</p>
           <p className="stat-card-value">{members.length}</p>
         </div>
       </div>
 
       {isAdmin ? (
-        <div className="receipt-card p-4 mb-5 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="label-eyebrow mb-1">Group passkey</p>
-              <button onClick={copyAccessCode} className="font-mono text-sm text-emerald hover:underline">
+        <div className="receipt-card p-3 mb-5 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <p className="label-eyebrow shrink-0">Passkey</p>
+              <button
+                onClick={copyAccessCode}
+                title="Share this so guests can jump straight into this group without an account."
+                className="font-mono text-sm text-emerald hover:underline truncate"
+              >
                 {copiedCode ? 'Copied!' : group.access_code}
               </button>
-              <p className="text-xs text-ink-faint mt-1">Share this so guests can jump straight into this group without an account.</p>
             </div>
             <button
               onClick={regenerateAccessCode}
               disabled={regenerating}
               className="text-xs text-ink-faint hover:text-brick transition-colors shrink-0"
             >
-              {regenerating ? 'Regenerating…' : 'Random'}
+              {regenerating ? '…' : 'Random'}
             </button>
           </div>
-          <form onSubmit={handleSetCustomCode} className="flex items-center gap-2 pt-2 border-t border-dashed border-rule">
+          <form onSubmit={handleSetCustomCode} className="flex items-center gap-2">
             <input
               value={customCode}
               onChange={(e) => setCustomCode(e.target.value)}
-              className="input-field font-mono flex-1"
-              placeholder="Set your own, e.g. goa2026"
+              className="input-field font-mono flex-1 text-sm py-1.5"
+              placeholder="Custom, e.g. goa2026"
             />
-            <button type="submit" disabled={savingCode || !customCode.trim()} className="btn-secondary shrink-0">
-              {savingCode ? 'Saving…' : 'Set'}
+            <button
+              type="submit"
+              disabled={savingCode || !customCode.trim()}
+              className="btn-secondary shrink-0 text-xs px-2.5 py-1.5"
+            >
+              {savingCode ? '…' : 'Set'}
             </button>
           </form>
           {codeError ? <p className="text-brick text-xs">{codeError}</p> : null}
-          <div className="flex items-center justify-between gap-3 pt-2 border-t border-dashed border-rule">
-            <div>
-              <p className="label-eyebrow mb-1">Danger zone</p>
-              <p className="text-xs text-ink-faint">Deletes this group and every expense/settlement in it. Can't be undone.</p>
-            </div>
+          <div className="flex items-center justify-between gap-2 pt-2 border-t border-dashed border-rule">
+            <p className="text-xs text-ink-faint" title="Deletes this group and every expense/settlement in it. Can't be undone.">
+              Danger zone
+            </p>
             <button
               onClick={handleDeleteGroup}
               disabled={deletingGroup}
-              className="text-xs px-2.5 py-1.5 rounded-md border border-brick/40 text-brick hover:bg-brick/10 transition-colors shrink-0"
+              className="text-xs px-2.5 py-1 rounded-md border border-brick/40 text-brick hover:bg-brick/10 transition-colors shrink-0"
             >
               {deletingGroup ? 'Deleting…' : 'Delete group'}
             </button>
