@@ -33,7 +33,7 @@ export function Layout({ children, back }: { children: ReactNode; back?: string 
                   to="/master"
                   className={`text-[11px] font-mono uppercase tracking-wide px-2.5 py-1.5 rounded-md border transition-colors whitespace-nowrap ${
                     isMasterActive
-                      ? 'bg-violet/20 text-violet border-violet shadow-glowViolet'
+                      ? 'bg-brick/20 text-brick border-brick shadow-glowBrick'
                       : 'bg-violet/10 text-violet border-violet/40 hover:bg-violet/20'
                   }`}
                 >
