@@ -63,6 +63,9 @@
   .btn-secondary {
     @apply bg-transparent border border-ink/20 text-ink font-medium rounded px-4 py-2.5 text-sm transition-colors hover:bg-ink/5 disabled:opacity-50 disabled:pointer-events-none;
   }
+  .btn-danger {
+    @apply bg-brick text-paper font-medium rounded px-4 py-2.5 text-sm transition-colors hover:bg-brick/90 disabled:opacity-50 disabled:pointer-events-none;
+  }
   .input-field {
     @apply w-full bg-paper-card border border-ink/15 rounded px-3 py-2.5 text-sm text-ink placeholder:text-ink-faint focus:border-emerald outline-none transition-colors;
   }
