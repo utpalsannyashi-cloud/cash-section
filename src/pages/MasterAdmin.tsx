@@ -107,7 +107,6 @@ export function MasterAdmin() {
         <h1 className="font-mono text-xl font-semibold flex items-center gap-2">
           Master admin <span className="status-pill bg-violet-light text-violet">oversight</span>
         </h1>
-        <p className="text-ink-soft text-sm mt-0.5">Every group and session, across every admin — read-only.</p>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
