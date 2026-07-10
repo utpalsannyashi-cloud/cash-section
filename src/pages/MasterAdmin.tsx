@@ -91,7 +91,7 @@ export function MasterAdmin() {
     return sessions.filter((s) => {
       if (filter !== 'all' && s.status !== filter) return false;
       const q = search.trim().toLowerCase();
-      if (q && !s.title.toLowerCase().includes(q) && !s.group_name.toLowerCase().includes(q) && !s.admin_username.toLowerCase().includes(q)) {
+      if (q && !s.group_name.toLowerCase().includes(q) && !s.admin_username.toLowerCase().includes(q)) {
         return false;
       }
       return true;
@@ -190,7 +190,7 @@ export function MasterAdmin() {
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="input-field mb-3"
-        placeholder="Search by session, group, or admin…"
+        placeholder="Search by group or admin…"
       />
       <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
         <button className={`chip ${filter === 'all' ? 'chip-active' : ''}`} onClick={() => setFilter('all')}>
@@ -215,11 +215,11 @@ export function MasterAdmin() {
           {visible.map((s) => (
             <li key={s.id}>
               <Link to={`/groups/${s.group_id}`} className="list-row">
-                <span className="avatar-circle">{s.title.charAt(0)}</span>
+                <span className="avatar-circle">{s.group_name.charAt(0)}</span>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate">{s.title}</p>
+                  <p className="font-medium truncate">{s.group_name}</p>
                   <p className="text-xs text-ink-faint mt-0.5">
-                    {s.group_name} · admin @{s.admin_username} ·{' '}
+                    admin @{s.admin_username} ·{' '}
                     {new Date(s.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </p>
                 </div>
