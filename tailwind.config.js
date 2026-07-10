@@ -47,7 +47,8 @@ export default {
           'repeating-linear-gradient(to right, transparent 0 6px, #27364A 6px 8px)'
       },
       boxShadow: {
-        glow: '0 0 0 1px rgba(59,130,246,0.4), 0 8px 24px -8px rgba(59,130,246,0.35)'
+        glow: '0 0 0 1px rgba(59,130,246,0.4), 0 8px 24px -8px rgba(59,130,246,0.35)',
+        glowViolet: '0 0 0 1px rgba(139,92,246,0.5), 0 8px 24px -8px rgba(139,92,246,0.45)'
       }
     }
   },
