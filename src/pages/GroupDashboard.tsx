@@ -41,7 +41,6 @@ export function GroupDashboard() {
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [computing, setComputing] = useState(false);
 
-  const [copiedInvite, setCopiedInvite] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [showCustomCode, setShowCustomCode] = useState(false);
@@ -204,13 +203,6 @@ export function GroupDashboard() {
     load();
   };
 
-  const copyInvite = async () => {
-    if (!group) return;
-    await navigator.clipboard.writeText(group.invite_code);
-    setCopiedInvite(true);
-    setTimeout(() => setCopiedInvite(false), 1500);
-  };
-
   // Currency lives on the sessions, not per-expense — picking a new one on
   // the add-expense form just relabels the whole group going forward.
   const handleCurrencyChange = async (newCurrency: string) => {
@@ -294,10 +286,6 @@ export function GroupDashboard() {
           <span className="text-ink-soft text-sm">
             Created {new Date(group.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
           </span>
-          <span className="text-ink-faint">·</span>
-          <button onClick={copyInvite} className="font-mono text-xs text-emerald hover:underline">
-            {copiedInvite ? 'Copied!' : `Invite code: ${group.invite_code}`}
-          </button>
         </div>
       </div>
 
