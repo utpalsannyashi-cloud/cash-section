@@ -48,7 +48,8 @@ export default {
       },
       boxShadow: {
         glow: '0 0 0 1px rgba(59,130,246,0.4), 0 8px 24px -8px rgba(59,130,246,0.35)',
-        glowViolet: '0 0 0 1px rgba(139,92,246,0.5), 0 8px 24px -8px rgba(139,92,246,0.45)'
+        glowViolet: '0 0 0 1px rgba(139,92,246,0.5), 0 8px 24px -8px rgba(139,92,246,0.45)',
+        glowBrick: '0 0 0 1px rgba(248,113,113,0.55), 0 8px 24px -8px rgba(248,113,113,0.45)'
       }
     }
   },
