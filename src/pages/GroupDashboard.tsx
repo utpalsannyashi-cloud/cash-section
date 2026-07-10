@@ -542,8 +542,9 @@ export function GroupDashboard() {
         </div>
       )}
 
-      {(showAdd || editingExpense) && primarySessionId && user ? (
+      {(showAdd || editingExpense) && primarySessionId && groupId && user ? (
         <AddExpenseModal
+          groupId={groupId}
           sessionId={primarySessionId}
           currency={currency}
           onCurrencyChange={handleCurrencyChange}
