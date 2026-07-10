@@ -2,6 +2,7 @@ import { FormEvent, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Expense, Profile } from '@/types';
 import { formatCurrency } from '@/utils/currency';
+import { BillUpload } from '@/components/BillUpload';
 
 export interface ParticipantLike {
   user_id: string;
@@ -18,6 +19,7 @@ export interface EditingSplit {
 const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'AUD', 'CAD', 'SGD', 'AED', 'JPY'];
 
 interface Props {
+  groupId: string;
   sessionId: string;
   currency: string;
   /** Called when the picked currency differs from `currency` — the parent
@@ -53,13 +55,14 @@ function splitEqually(totalRupees: number, ids: string[]): Record<string, number
 }
 
 /**
- * Kept intentionally minimal: just what it was for and how much. Every
- * expense is split evenly across the whole group automatically — no
- * category, payer picker, custom splits, or bill upload to fuss over
- * while everyone's still at the table. The full settle-up math still
- * runs later from the "Split up" button.
+ * Kept intentionally minimal: just what it was for, how much, and an
+ * optional photo/PDF of the bill. Every expense is split evenly across the
+ * whole group automatically — no category, payer picker, or custom splits
+ * to fuss over while everyone's still at the table. The full settle-up math
+ * still runs later from the "Split up" button.
  */
 export function AddExpenseModal({
+  groupId,
   sessionId,
   currency,
   onCurrencyChange,
@@ -74,6 +77,7 @@ export function AddExpenseModal({
   const [amount, setAmount] = useState(() => (editingExpense ? String(editingExpense.amount) : ''));
   const [description, setDescription] = useState(() => editingExpense?.description ?? '');
   const [selectedCurrency, setSelectedCurrency] = useState(currency || 'INR');
+  const [attachmentPath, setAttachmentPath] = useState<string | null>(editingExpense?.attachment_path ?? null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -111,7 +115,7 @@ export function AddExpenseModal({
         p_category: editingExpense.category,
         p_paid_by: editingExpense.paid_by,
         p_split_type: 'equal',
-        p_attachment_path: editingExpense.attachment_path,
+        p_attachment_path: attachmentPath,
         p_splits: Object.entries(shares).map(([userId, share]) => ({ user_id: userId, share }))
       });
 
@@ -133,7 +137,7 @@ export function AddExpenseModal({
         description,
         category: 'Misc',
         split_type: 'equal',
-        attachment_path: null,
+        attachment_path: attachmentPath,
         created_by: currentUserId
       })
       .select()
@@ -221,6 +225,19 @@ export function AddExpenseModal({
             .
             {selectedCurrency !== currency ? ` This'll switch the group to ${selectedCurrency}.` : ''}
           </p>
+
+          <div>
+            <BillUpload groupId={groupId} sessionId={sessionId} value={attachmentPath} onUploaded={setAttachmentPath} />
+            {attachmentPath ? (
+              <button
+                type="button"
+                onClick={() => setAttachmentPath(null)}
+                className="text-xs text-ink-faint hover:text-brick mt-1"
+              >
+                Remove attachment
+              </button>
+            ) : null}
+          </div>
 
           {error ? <p className="text-brick text-sm">{error}</p> : null}
 
