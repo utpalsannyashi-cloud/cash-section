@@ -195,6 +195,14 @@ export function GroupDashboard() {
     setTimeout(() => setCopiedInvite(false), 1500);
   };
 
+  // Currency lives on the sessions, not per-expense — picking a new one on
+  // the add-expense form just relabels the whole group going forward.
+  const handleCurrencyChange = async (newCurrency: string) => {
+    if (sessionIds.length === 0) return;
+    await supabase.from('sessions').update({ currency: newCurrency }).in('id', sessionIds);
+    setCurrency(newCurrency);
+  };
+
   const copyAccessCode = async () => {
     if (!group) return;
     await navigator.clipboard.writeText(group.access_code);
@@ -443,6 +451,7 @@ export function GroupDashboard() {
         <AddExpenseModal
           sessionId={primarySessionId}
           currency={currency}
+          onCurrencyChange={handleCurrencyChange}
           participants={participants}
           currentUserId={user.id}
           editingExpense={editingExpense ?? undefined}
