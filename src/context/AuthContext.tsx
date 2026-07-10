@@ -21,12 +21,11 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-// Real (non-guest) accounts get signed out automatically after a full day
-// with no activity anywhere in the app — protects a shared/borrowed device
-// from staying logged in as an admin indefinitely. Anonymous guest sessions
-// (unlocked via a group passkey) are left alone, so a multi-day trip doesn't
-// force everyone back to the passkey screen just because nobody opened the
-// app for a day.
+// After a full day with no activity anywhere in the app, the current
+// session — real account or anonymous guest alike — is dropped and a fresh
+// anonymous session takes its place. Protects a shared/borrowed device from
+// staying signed in indefinitely; the tradeoff is that a guest who's been
+// away for over a day needs to re-enter their group's passkey.
 const LAST_ACTIVITY_KEY = 'cash-section:last-activity-at';
 const INACTIVITY_LIMIT_MS = 24 * 60 * 60 * 1000;
 
@@ -59,17 +58,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // On first load, either resume a real/guest session, or silently start a
     // new anonymous one — so guests can browse sessions and unlock one with
     // a passkey without ever hitting a login wall. Admins/members who sign
-    // in for real simply replace this anonymous session afterwards. A real
+    // in for real simply replace this anonymous session afterwards. Any
     // session that's been idle for over a day gets signed out right here,
     // before it's ever handed to the rest of the app.
     const bootstrap = async () => {
       const { data } = await supabase.auth.getSession();
       if (cancelled) return;
 
-      const staleRealSession =
-        data.session && !isAnonymousUser(data.session.user) && idleDurationMs() > INACTIVITY_LIMIT_MS;
+      const staleSession = data.session && idleDurationMs() > INACTIVITY_LIMIT_MS;
 
-      if (staleRealSession) {
+      if (staleSession) {
         await supabase.auth.signOut();
         const { data: anon } = await supabase.auth.signInAnonymously();
         if (!cancelled && anon.session) {
@@ -157,7 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     events.forEach((evt) => document.addEventListener(evt, touchActivity, { passive: true }));
 
     const checkIdle = () => {
-      if (session && !isAnonymousUser(session.user) && idleDurationMs() > INACTIVITY_LIMIT_MS) {
+      if (session && idleDurationMs() > INACTIVITY_LIMIT_MS) {
         signOut();
       }
     };
