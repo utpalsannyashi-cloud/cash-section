@@ -21,6 +21,28 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+// Real (non-guest) accounts get signed out automatically after a full day
+// with no activity anywhere in the app — protects a shared/borrowed device
+// from staying logged in as an admin indefinitely. Anonymous guest sessions
+// (unlocked via a group passkey) are left alone, so a multi-day trip doesn't
+// force everyone back to the passkey screen just because nobody opened the
+// app for a day.
+const LAST_ACTIVITY_KEY = 'cash-section:last-activity-at';
+const INACTIVITY_LIMIT_MS = 24 * 60 * 60 * 1000;
+
+function isAnonymousUser(user: User | null | undefined): boolean {
+  return Boolean((user as any)?.is_anonymous);
+}
+
+function touchActivity() {
+  localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+}
+
+function idleDurationMs(): number {
+  const raw = localStorage.getItem(LAST_ACTIVITY_KEY);
+  return raw ? Date.now() - parseInt(raw, 10) : 0;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -37,12 +59,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // On first load, either resume a real/guest session, or silently start a
     // new anonymous one — so guests can browse sessions and unlock one with
     // a passkey without ever hitting a login wall. Admins/members who sign
-    // in for real simply replace this anonymous session afterwards.
+    // in for real simply replace this anonymous session afterwards. A real
+    // session that's been idle for over a day gets signed out right here,
+    // before it's ever handed to the rest of the app.
     const bootstrap = async () => {
       const { data } = await supabase.auth.getSession();
       if (cancelled) return;
 
-      if (data.session) {
+      const staleRealSession =
+        data.session && !isAnonymousUser(data.session.user) && idleDurationMs() > INACTIVITY_LIMIT_MS;
+
+      if (staleRealSession) {
+        await supabase.auth.signOut();
+        const { data: anon } = await supabase.auth.signInAnonymously();
+        if (!cancelled && anon.session) {
+          setSession(anon.session);
+          if (anon.session.user) await loadProfile(anon.session.user.id);
+        }
+      } else if (data.session) {
         setSession(data.session);
         if (data.session.user) await loadProfile(data.session.user.id);
       } else {
@@ -52,6 +86,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (anon.session.user) await loadProfile(anon.session.user.id);
         }
       }
+
+      touchActivity();
       if (!cancelled) setLoading(false);
     };
 
@@ -72,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const isGuest = Boolean((session?.user as any)?.is_anonymous);
+  const isGuest = isAnonymousUser(session?.user);
   const isMasterAdmin = Boolean(profile?.is_master_admin);
 
   const signUp = async (email: string, password: string, username: string) => {
@@ -97,6 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
+    touchActivity();
   };
 
   const signOut = async () => {
@@ -104,11 +141,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Drop straight back into a fresh anonymous/guest session rather than
     // leaving the app in a signed-out dead end.
     await supabase.auth.signInAnonymously();
+    touchActivity();
   };
 
   const refreshProfile = async () => {
     if (session?.user) await loadProfile(session.user.id);
   };
+
+  // While the tab is actually in use, keep nudging the activity clock
+  // forward on any interaction. A periodic check (plus one on tab refocus)
+  // catches a long-lived tab that's crossed the inactivity threshold
+  // without ever being reloaded.
+  useEffect(() => {
+    const events = ['click', 'keydown', 'scroll', 'touchstart'];
+    events.forEach((evt) => document.addEventListener(evt, touchActivity, { passive: true }));
+
+    const checkIdle = () => {
+      if (session && !isAnonymousUser(session.user) && idleDurationMs() > INACTIVITY_LIMIT_MS) {
+        signOut();
+      }
+    };
+    document.addEventListener('visibilitychange', checkIdle);
+    const interval = setInterval(checkIdle, 60 * 1000);
+
+    return () => {
+      events.forEach((evt) => document.removeEventListener(evt, touchActivity));
+      document.removeEventListener('visibilitychange', checkIdle);
+      clearInterval(interval);
+    };
+  }, [session]);
 
   return (
     <AuthContext.Provider
