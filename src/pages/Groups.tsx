@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, MouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { supabase } from '@/lib/supabase';
@@ -29,6 +29,17 @@ export function Groups() {
   const [joinCode, setJoinCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Long-press action sheet (admin-owned groups only): rename, change
+  // passkey, or delete — without leaving the groups list.
+  const [menuGroup, setMenuGroup] = useState<GroupWithRole | null>(null);
+  const [menuMode, setMenuMode] = useState<'menu' | 'rename' | 'passkey' | 'delete'>('menu');
+  const [renameValue, setRenameValue] = useState('');
+  const [passkeyValue, setPasskeyValue] = useState('');
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const longPressTimer = useRef<number | null>(null);
+  const longPressTriggered = useRef(false);
 
   const loadGroups = async () => {
     setLoading(true);
@@ -167,6 +178,114 @@ export function Groups() {
     }
     setJoinCode('');
     setShowJoin(false);
+    loadGroups();
+  };
+
+  const openMenu = (g: GroupWithRole) => {
+    setMenuGroup(g);
+    setMenuMode('menu');
+    setRenameValue(g.name);
+    setPasskeyValue('');
+    setActionError(null);
+  };
+
+  const closeMenu = () => {
+    setMenuGroup(null);
+    setMenuMode('menu');
+    setActionError(null);
+  };
+
+  // Pointer-based long-press: works for touch and mouse alike. A short
+  // tap still navigates into the group as normal; holding for ~550ms
+  // opens the action sheet instead and swallows the click that follows.
+  const handlePointerDown = (g: GroupWithRole) => {
+    if (g.role !== 'admin') return;
+    longPressTriggered.current = false;
+    longPressTimer.current = window.setTimeout(() => {
+      longPressTriggered.current = true;
+      openMenu(g);
+    }, 550);
+  };
+
+  const clearLongPress = () => {
+    if (longPressTimer.current) {
+      window.clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const handleRowClick = (e: MouseEvent) => {
+    if (longPressTriggered.current) {
+      e.preventDefault();
+      longPressTriggered.current = false;
+    }
+  };
+
+  const handleRename = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!menuGroup) return;
+    const trimmed = renameValue.trim();
+    if (!trimmed) return;
+    setActionBusy(true);
+    setActionError(null);
+    const { error: updateError } = await supabase.from('groups').update({ name: trimmed }).eq('id', menuGroup.id);
+    setActionBusy(false);
+    if (updateError) {
+      setActionError(updateError.message);
+      return;
+    }
+    closeMenu();
+    loadGroups();
+  };
+
+  const handleChangePasskey = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!menuGroup) return;
+    const code = passkeyValue.trim().toLowerCase();
+    if (!CODE_PATTERN.test(code)) {
+      setActionError('Use 4–20 lowercase letters/numbers, e.g. goa2026.');
+      return;
+    }
+    setActionBusy(true);
+    setActionError(null);
+    const { error: updateError } = await supabase.from('groups').update({ access_code: code }).eq('id', menuGroup.id);
+    setActionBusy(false);
+    if (updateError) {
+      setActionError(
+        updateError.message.includes('duplicate') ? 'That passkey is already taken — pick another.' : updateError.message
+      );
+      return;
+    }
+    closeMenu();
+    loadGroups();
+  };
+
+  const handleRandomPasskey = async () => {
+    if (!menuGroup) return;
+    setActionBusy(true);
+    setActionError(null);
+    const newCode = Math.random().toString(36).slice(2, 8);
+    const { error: updateError } = await supabase.from('groups').update({ access_code: newCode }).eq('id', menuGroup.id);
+    setActionBusy(false);
+    if (updateError) {
+      setActionError(updateError.message);
+      return;
+    }
+    closeMenu();
+    loadGroups();
+  };
+
+  const handleDeleteGroup = async () => {
+    if (!menuGroup) return;
+    setActionBusy(true);
+    setActionError(null);
+    const { error: deleteError } = await supabase.from('groups').delete().eq('id', menuGroup.id);
+    setActionBusy(false);
+    if (deleteError) {
+      setActionError(deleteError.message);
+      return;
+    }
+    closeMenu();
     loadGroups();
   };
 
@@ -346,7 +465,18 @@ export function Groups() {
         <ul className="space-y-2">
           {visibleGroups.map((g) => (
             <li key={g.id}>
-              <Link to={`/groups/${g.id}`} className="list-row">
+              <Link
+                to={`/groups/${g.id}`}
+                className={`list-row ${g.role === 'admin' ? 'select-none' : ''}`}
+                onClick={handleRowClick}
+                onPointerDown={() => handlePointerDown(g)}
+                onPointerUp={clearLongPress}
+                onPointerLeave={clearLongPress}
+                onPointerCancel={clearLongPress}
+                onContextMenu={(e) => {
+                  if (g.role === 'admin') e.preventDefault();
+                }}
+              >
                 <span className="avatar-circle">{g.name.charAt(0)}</span>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium truncate">{g.name}</p>
@@ -366,6 +496,115 @@ export function Groups() {
           ))}
         </ul>
       )}
+
+      {menuGroup ? (
+        <div className="fixed inset-0 bg-ink/40 flex items-end sm:items-center justify-center z-20 p-0 sm:p-4">
+          <div className="bg-paper w-full sm:max-w-sm sm:rounded-lg rounded-t-2xl overflow-y-auto">
+            <div className="p-5 border-b border-rule flex items-center justify-between">
+              <h2 className="font-mono font-semibold truncate">{menuGroup.name}</h2>
+              <button onClick={closeMenu} className="text-ink-faint hover:text-ink text-xl leading-none shrink-0">
+                ×
+              </button>
+            </div>
+
+            {menuMode === 'menu' ? (
+              <div className="p-2">
+                <button
+                  onClick={() => setMenuMode('rename')}
+                  className="w-full text-left px-3 py-3 rounded-md hover:bg-ink/5 transition-colors text-sm"
+                >
+                  Edit name
+                </button>
+                <button
+                  onClick={() => setMenuMode('passkey')}
+                  className="w-full text-left px-3 py-3 rounded-md hover:bg-ink/5 transition-colors text-sm"
+                >
+                  Change passkey
+                </button>
+                <button
+                  onClick={() => setMenuMode('delete')}
+                  className="w-full text-left px-3 py-3 rounded-md hover:bg-brick/10 transition-colors text-sm text-brick"
+                >
+                  Delete group
+                </button>
+              </div>
+            ) : null}
+
+            {menuMode === 'rename' ? (
+              <form onSubmit={handleRename} className="p-5 space-y-3">
+                <label className="label-eyebrow block">Group name</label>
+                <input
+                  required
+                  autoFocus
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  className="input-field"
+                  maxLength={60}
+                />
+                {actionError ? <p className="text-brick text-xs">{actionError}</p> : null}
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setMenuMode('menu')} className="btn-secondary flex-1">
+                    Back
+                  </button>
+                  <button type="submit" disabled={actionBusy} className="btn-primary flex-1">
+                    {actionBusy ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              </form>
+            ) : null}
+
+            {menuMode === 'passkey' ? (
+              <form onSubmit={handleChangePasskey} className="p-5 space-y-3">
+                <label className="label-eyebrow block">New passkey</label>
+                <input
+                  required
+                  autoFocus
+                  value={passkeyValue}
+                  onChange={(e) => setPasskeyValue(e.target.value)}
+                  className="input-field font-mono"
+                  placeholder="e.g. goa2026"
+                />
+                <p className="text-xs text-ink-faint">4–20 lowercase letters/numbers.</p>
+                {actionError ? <p className="text-brick text-xs">{actionError}</p> : null}
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setMenuMode('menu')} className="btn-secondary flex-1">
+                    Back
+                  </button>
+                  <button type="submit" disabled={actionBusy} className="btn-primary flex-1">
+                    {actionBusy ? 'Saving…' : 'Set'}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRandomPasskey}
+                  disabled={actionBusy}
+                  className="text-xs text-ink-faint hover:text-ink transition-colors"
+                >
+                  Or generate one randomly
+                </button>
+              </form>
+            ) : null}
+
+            {menuMode === 'delete' ? (
+              <div className="p-5 space-y-4">
+                <p className="text-sm text-ink-soft">
+                  Delete <span className="text-ink font-medium">"{menuGroup.name}"</span>? This permanently removes
+                  every expense, member, and settlement in it — this can't be undone.
+                </p>
+                {actionError ? <p className="text-brick text-sm">{actionError}</p> : null}
+                <div className="flex gap-2">
+                  <button onClick={() => setMenuMode('menu')} className="btn-secondary flex-1">
+                    Cancel
+                  </button>
+                  <button onClick={handleDeleteGroup} disabled={actionBusy} className="btn-danger flex-1">
+                    {actionBusy ? 'Deleting…' : 'Delete group'}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </Layout>
   );
 }
