@@ -20,6 +20,18 @@
     outline: 2px solid theme('colors.emerald.DEFAULT');
     outline-offset: 2px;
   }
+  /* The browser's default up/down number-input stepper renders as a light,
+     OS-styled widget that clashes with the dark flat theme — drop it so
+     amount fields look like every other input in the app. */
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
 }
 
 @layer components {
