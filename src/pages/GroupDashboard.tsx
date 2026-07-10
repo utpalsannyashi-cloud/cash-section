@@ -52,6 +52,13 @@ export function GroupDashboard() {
   const [deletingGroup, setDeletingGroup] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // Which stat card's detail panel is open (only one at a time), rendered
+  // just below the card row. 'passkey' is the admin-only management panel
+  // that used to be its own always-visible box — it's now a same-sized
+  // tile alongside the other three, expanding on click instead of eating
+  // vertical space by default.
+  const [expandedPanel, setExpandedPanel] = useState<'spend' | 'expenses' | 'members' | 'passkey' | null>(null);
+
   const isAdmin = members.find((m) => m.user_id === user?.id)?.role === 'admin';
 
   const load = useCallback(async () => {
@@ -135,6 +142,15 @@ export function GroupDashboard() {
 
   const totalSpend = expenses.reduce((sum, e) => sum + e.amount, 0);
   const participants: ParticipantLike[] = members.map((m) => ({ user_id: m.user_id, profile: m.profile }));
+
+  // Detail-panel data — computed from state already in memory, no extra queries.
+  const paidByMember = [...members]
+    .map((m) => ({
+      member: m,
+      total: expenses.filter((e) => e.paid_by === m.user_id).reduce((sum, e) => sum + e.amount, 0)
+    }))
+    .sort((a, b) => b.total - a.total);
+  const recentExpenses = expenses.slice(0, 5);
 
   const handleDeleteExpense = async (id: string) => {
     await supabase.from('expenses').delete().eq('id', id);
@@ -285,22 +301,101 @@ export function GroupDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3 mb-5">
-        <div className="stat-card stat-card-accent-emerald">
+      <div className={`grid ${isAdmin ? 'grid-cols-4' : 'grid-cols-3'} gap-3 mb-3`}>
+        <button
+          type="button"
+          onClick={() => setExpandedPanel((v) => (v === 'spend' ? null : 'spend'))}
+          className={`stat-card stat-card-accent-emerald text-left ${expandedPanel === 'spend' ? 'bg-ink/5' : ''}`}
+        >
           <p className="stat-card-label">Total spend</p>
           <p className="stat-card-value text-lg">{formatCurrency(totalSpend, currency)}</p>
-        </div>
-        <div className="stat-card stat-card-accent-violet">
+        </button>
+        <button
+          type="button"
+          onClick={() => setExpandedPanel((v) => (v === 'expenses' ? null : 'expenses'))}
+          className={`stat-card stat-card-accent-violet text-left ${expandedPanel === 'expenses' ? 'bg-ink/5' : ''}`}
+        >
           <p className="stat-card-label">Expenses</p>
           <p className="stat-card-value">{expenses.length}</p>
-        </div>
-        <div className="stat-card stat-card-accent-amber">
+        </button>
+        <button
+          type="button"
+          onClick={() => setExpandedPanel((v) => (v === 'members' ? null : 'members'))}
+          className={`stat-card stat-card-accent-amber text-left ${expandedPanel === 'members' ? 'bg-ink/5' : ''}`}
+        >
           <p className="stat-card-label">Members</p>
           <p className="stat-card-value">{members.length}</p>
-        </div>
+        </button>
+        {isAdmin ? (
+          <button
+            type="button"
+            onClick={() => setExpandedPanel((v) => (v === 'passkey' ? null : 'passkey'))}
+            className={`stat-card stat-card-accent-neutral text-left ${expandedPanel === 'passkey' ? 'bg-ink/5' : ''}`}
+          >
+            <p className="stat-card-label">Passkey</p>
+            <p className="stat-card-value text-lg font-mono truncate">{group.access_code}</p>
+          </button>
+        ) : null}
       </div>
 
-      {isAdmin ? (
+      {expandedPanel === 'spend' ? (
+        <div className="receipt-card p-4 mb-5">
+          <p className="label-eyebrow mb-3">Who's paid what</p>
+          {paidByMember.every((p) => p.total === 0) ? (
+            <p className="text-sm text-ink-soft">No expenses yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {paidByMember.map(({ member, total }) => (
+                <li key={member.user_id} className="flex items-center justify-between gap-2">
+                  <span className="text-sm text-ink-soft truncate">
+                    {member.user_id === user?.id ? 'You' : `@${member.profile?.username ?? 'member'}`}
+                  </span>
+                  <span className="font-mono text-sm shrink-0">{formatCurrency(total, currency)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+
+      {expandedPanel === 'expenses' ? (
+        <div className="receipt-card p-4 mb-5">
+          <p className="label-eyebrow mb-3">Recent expenses</p>
+          {recentExpenses.length === 0 ? (
+            <p className="text-sm text-ink-soft">No expenses logged yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {recentExpenses.map((e) => (
+                <li key={e.id} className="flex items-center justify-between gap-2">
+                  <span className="text-sm text-ink-soft truncate">{e.description}</span>
+                  <span className="font-mono text-sm shrink-0">{formatCurrency(e.amount, currency)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+
+      {expandedPanel === 'members' ? (
+        <div className="receipt-card p-4 mb-5">
+          <p className="label-eyebrow mb-3">Group members</p>
+          <ul className="space-y-2.5">
+            {members.map((m) => (
+              <li key={m.user_id} className="flex items-center gap-2.5">
+                <span className="avatar-circle text-xs" aria-hidden>
+                  {m.profile?.username?.charAt(0)?.toUpperCase() ?? '•'}
+                </span>
+                <span className="text-sm text-ink-soft truncate flex-1">
+                  {m.user_id === user?.id ? 'You' : `@${m.profile?.username ?? 'member'}`}
+                </span>
+                {m.role === 'admin' ? <span className="status-pill bg-emerald-light text-emerald-dark">Admin</span> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {expandedPanel === 'passkey' && isAdmin ? (
         <div className="receipt-card px-3 py-2 mb-5">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 min-w-0">
