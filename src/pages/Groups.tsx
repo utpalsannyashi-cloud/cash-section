@@ -351,7 +351,7 @@ export function Groups() {
                 <div className="flex-1 min-w-0">
                   <p className="font-medium truncate">{g.name}</p>
                   <p className="text-xs text-ink-faint mt-0.5">
-                    {g.member_count} member{g.member_count === 1 ? '' : 's'} · #{g.invite_code}
+                    {g.member_count} member{g.member_count === 1 ? '' : 's'}
                   </p>
                 </div>
                 <span
