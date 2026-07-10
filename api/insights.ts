@@ -41,17 +41,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const userId = userData.user.id;
 
   // 2. Confirm the caller has some standing in this group: either a full
-  // group_members row (any role, not just admin), or a session_participants
+  // group_members row (any role, not just admin), a session_participants
   // row on one of this group's sessions (i.e. they unlocked it with a
-  // passkey). Either is enough to use spending insights.
-  const { data: membership } = await supabaseAdmin
-    .from('group_members')
-    .select('role')
-    .eq('group_id', groupId)
-    .eq('user_id', userId)
-    .single();
+  // passkey), or master admin status — mirroring the is_master_admin()
+  // RLS bypass used everywhere else in the app, so master admins get
+  // read-only insights access across every group, not just ones they
+  // personally belong to.
+  const { data: profile } = await supabaseAdmin.from('profiles').select('is_master_admin').eq('id', userId).single();
 
-  let authorized = Boolean(membership);
+  let authorized = Boolean(profile?.is_master_admin);
+
+  if (!authorized) {
+    const { data: membership } = await supabaseAdmin
+      .from('group_members')
+      .select('role')
+      .eq('group_id', groupId)
+      .eq('user_id', userId)
+      .single();
+    authorized = Boolean(membership);
+  }
 
   if (!authorized) {
     const { data: unlockedSessions } = await supabaseAdmin
