@@ -1,10 +1,12 @@
 import { ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 
 export function Layout({ children, back }: { children: ReactNode; back?: string }) {
   const { profile, signOut, isGuest, isMasterAdmin } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isMasterActive = location.pathname.startsWith('/master');
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -29,7 +31,11 @@ export function Layout({ children, back }: { children: ReactNode; back?: string 
               {isMasterAdmin ? (
                 <Link
                   to="/master"
-                  className="text-[11px] font-mono uppercase tracking-wide px-2.5 py-1.5 rounded-md bg-violet/10 text-violet border border-violet/40 hover:bg-violet/20 transition-colors whitespace-nowrap"
+                  className={`text-[11px] font-mono uppercase tracking-wide px-2.5 py-1.5 rounded-md border transition-colors whitespace-nowrap ${
+                    isMasterActive
+                      ? 'bg-violet/20 text-violet border-violet shadow-glowViolet'
+                      : 'bg-violet/10 text-violet border-violet/40 hover:bg-violet/20'
+                  }`}
                 >
                   Master admin
                 </Link>
