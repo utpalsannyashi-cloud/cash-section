@@ -13,9 +13,16 @@ export interface EditingSplit {
   share: number;
 }
 
+// A short, curated list rather than every ISO code — keeps the picker to a
+// single tap for the currencies this app's groups actually use.
+const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'AUD', 'CAD', 'SGD', 'AED', 'JPY'];
+
 interface Props {
   sessionId: string;
   currency: string;
+  /** Called when the picked currency differs from `currency` — the parent
+   *  applies it to the whole group (there's no per-expense currency). */
+  onCurrencyChange?: (currency: string) => void | Promise<void>;
   participants: ParticipantLike[]; // everyone the expense is split across (all current group members)
   currentUserId: string;
   onClose: () => void;
@@ -25,7 +32,7 @@ interface Props {
 }
 
 /**
- * Splits totalRupees evenly across count people, in integer paise,
+ * Splits `totalRupees` evenly across `count` people, in integer paise,
  * distributing any leftover cent(s) to the first few people so the sum
  * always matches exactly (required by the DB's split-sum trigger).
  */
@@ -55,6 +62,7 @@ function splitEqually(totalRupees: number, ids: string[]): Record<string, number
 export function AddExpenseModal({
   sessionId,
   currency,
+  onCurrencyChange,
   participants,
   currentUserId,
   onClose,
@@ -65,6 +73,7 @@ export function AddExpenseModal({
 
   const [amount, setAmount] = useState(() => (editingExpense ? String(editingExpense.amount) : ''));
   const [description, setDescription] = useState(() => editingExpense?.description ?? '');
+  const [selectedCurrency, setSelectedCurrency] = useState(currency || 'INR');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -89,6 +98,10 @@ export function AddExpenseModal({
     );
 
     setBusy(true);
+
+    if (selectedCurrency !== currency && onCurrencyChange) {
+      await onCurrencyChange(selectedCurrency);
+    }
 
     if (isEditing && editingExpense) {
       const { error: rpcError } = await supabase.rpc('update_expense', {
@@ -174,24 +187,39 @@ export function AddExpenseModal({
 
           <div>
             <label className="label-eyebrow block mb-1.5">Amount</label>
-            <input
-              required
-              type="number"
-              step="0.01"
-              min="0.01"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="input-field font-mono"
-              placeholder="0.00"
-            />
+            <div className="flex gap-2">
+              <select
+                value={selectedCurrency}
+                onChange={(e) => setSelectedCurrency(e.target.value)}
+                title="Applies to the whole group, not just this expense"
+                className="input-field font-mono w-[4.75rem] shrink-0 px-2"
+              >
+                {CURRENCIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              <input
+                required
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="input-field font-mono flex-1"
+                placeholder="0.00"
+              />
+            </div>
           </div>
 
           <p className="text-xs text-ink-faint">
             Split evenly across all {participants.length} group member{participants.length === 1 ? '' : 's'}
             {numericAmount > 0 && participants.length > 0
-              ? ` — ${formatCurrency(numericAmount / participants.length, currency)} each`
+              ? ` — ${formatCurrency(numericAmount / participants.length, selectedCurrency)} each`
               : ''}
             .
+            {selectedCurrency !== currency ? ` This'll switch the group to ${selectedCurrency}.` : ''}
           </p>
 
           {error ? <p className="text-brick text-sm">{error}</p> : null}
