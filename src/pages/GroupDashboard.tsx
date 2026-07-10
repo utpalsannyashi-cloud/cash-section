@@ -44,10 +44,13 @@ export function GroupDashboard() {
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [showCustomCode, setShowCustomCode] = useState(false);
   const [customCode, setCustomCode] = useState('');
   const [savingCode, setSavingCode] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingGroup, setDeletingGroup] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const isAdmin = members.find((m) => m.user_id === user?.id)?.role === 'admin';
 
@@ -231,18 +234,11 @@ export function GroupDashboard() {
 
   const handleDeleteGroup = async () => {
     if (!groupId || !group) return;
-    if (
-      !window.confirm(
-        `Delete "${group.name}"? This permanently removes every expense, member, and settlement in this group. This can't be undone.`
-      )
-    ) {
-      return;
-    }
     setDeletingGroup(true);
     const { error } = await supabase.from('groups').delete().eq('id', groupId);
     setDeletingGroup(false);
     if (error) {
-      window.alert(error.message);
+      setDeleteError(error.message);
       return;
     }
     navigate('/groups', { replace: true });
@@ -297,53 +293,99 @@ export function GroupDashboard() {
       </div>
 
       {isAdmin ? (
-        <div className="receipt-card p-3 mb-5 space-y-2">
+        <div className="receipt-card px-3 py-2 mb-5">
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <p className="label-eyebrow shrink-0">Passkey</p>
+            <div className="flex items-center gap-1.5 min-w-0">
+              <p className="label-eyebrow shrink-0">Key</p>
               <button
                 onClick={copyAccessCode}
                 title="Share this so guests can jump straight into this group without an account."
-                className="font-mono text-sm text-emerald hover:underline truncate"
+                className="font-mono text-xs text-emerald hover:underline truncate"
               >
                 {copiedCode ? 'Copied!' : group.access_code}
               </button>
             </div>
-            <button
-              onClick={regenerateAccessCode}
-              disabled={regenerating}
-              className="text-xs text-ink-faint hover:text-brick transition-colors shrink-0"
-            >
-              {regenerating ? '…' : 'Random'}
-            </button>
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                onClick={regenerateAccessCode}
+                disabled={regenerating}
+                className="text-[11px] text-ink-faint hover:text-ink transition-colors"
+              >
+                {regenerating ? '…' : 'Random'}
+              </button>
+              <button
+                onClick={() => setShowCustomCode((v) => !v)}
+                className="text-[11px] text-ink-faint hover:text-ink transition-colors"
+              >
+                Custom
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                title="Delete this group"
+                className="text-[11px] text-brick/70 hover:text-brick transition-colors"
+              >
+                Delete
+              </button>
+            </div>
           </div>
-          <form onSubmit={handleSetCustomCode} className="flex items-center gap-2">
-            <input
-              value={customCode}
-              onChange={(e) => setCustomCode(e.target.value)}
-              className="input-field font-mono flex-1 text-sm py-1.5"
-              placeholder="Custom, e.g. goa2026"
-            />
-            <button
-              type="submit"
-              disabled={savingCode || !customCode.trim()}
-              className="btn-secondary shrink-0 text-xs px-2.5 py-1.5"
-            >
-              {savingCode ? '…' : 'Set'}
-            </button>
-          </form>
-          {codeError ? <p className="text-brick text-xs">{codeError}</p> : null}
-          <div className="flex items-center justify-between gap-2 pt-2 border-t border-dashed border-rule">
-            <p className="text-xs text-ink-faint" title="Deletes this group and every expense/settlement in it. Can't be undone.">
-              Danger zone
-            </p>
-            <button
-              onClick={handleDeleteGroup}
-              disabled={deletingGroup}
-              className="text-xs px-2.5 py-1 rounded-md border border-brick/40 text-brick hover:bg-brick/10 transition-colors shrink-0"
-            >
-              {deletingGroup ? 'Deleting…' : 'Delete group'}
-            </button>
+          {showCustomCode ? (
+            <form onSubmit={handleSetCustomCode} className="flex items-center gap-2 mt-2 pt-2 border-t border-dashed border-rule">
+              <input
+                autoFocus
+                value={customCode}
+                onChange={(e) => setCustomCode(e.target.value)}
+                className="input-field font-mono flex-1 text-xs py-1"
+                placeholder="Custom, e.g. goa2026"
+              />
+              <button
+                type="submit"
+                disabled={savingCode || !customCode.trim()}
+                className="btn-secondary shrink-0 text-[11px] px-2 py-1"
+              >
+                {savingCode ? '…' : 'Set'}
+              </button>
+            </form>
+          ) : null}
+          {codeError ? <p className="text-brick text-[11px] mt-1">{codeError}</p> : null}
+        </div>
+      ) : null}
+
+      {showDeleteConfirm ? (
+        <div className="fixed inset-0 bg-ink/40 flex items-end sm:items-center justify-center z-20 p-0 sm:p-4">
+          <div className="bg-paper w-full sm:max-w-sm sm:rounded-lg rounded-t-2xl overflow-y-auto">
+            <div className="p-5 border-b border-rule flex items-center justify-between">
+              <h2 className="font-mono font-semibold">Delete group</h2>
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDeleteError(null);
+                }}
+                className="text-ink-faint hover:text-ink text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-ink-soft">
+                Delete <span className="text-ink font-medium">"{group.name}"</span>? This permanently removes every
+                expense, member, and settlement in it — this can't be undone.
+              </p>
+              {deleteError ? <p className="text-brick text-sm">{deleteError}</p> : null}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setDeleteError(null);
+                  }}
+                  className="btn-secondary flex-1"
+                >
+                  Cancel
+                </button>
+                <button onClick={handleDeleteGroup} disabled={deletingGroup} className="btn-danger flex-1">
+                  {deletingGroup ? 'Deleting…' : 'Delete group'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       ) : null}
