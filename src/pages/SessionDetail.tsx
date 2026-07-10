@@ -248,8 +248,9 @@ export function SessionDetail() {
         </div>
       )}
 
-      {(showAdd || editingExpense) && sessionId && user ? (
+      {(showAdd || editingExpense) && sessionId && groupId && user ? (
         <AddExpenseModal
+          groupId={groupId}
           sessionId={sessionId}
           currency={session.currency}
           participants={participants}
