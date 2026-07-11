@@ -474,7 +474,13 @@ export function Groups() {
                 onPointerLeave={clearLongPress}
                 onPointerCancel={clearLongPress}
                 onContextMenu={(e) => {
-                  if (g.role === 'admin') e.preventDefault();
+                  // Right-click is the desktop/laptop equivalent of a
+                  // long-press — same action sheet, no need to click and
+                  // hold with a mouse.
+                  if (g.role === 'admin') {
+                    e.preventDefault();
+                    openMenu(g);
+                  }
                 }}
               >
                 <span className="avatar-circle">{g.name.charAt(0)}</span>
