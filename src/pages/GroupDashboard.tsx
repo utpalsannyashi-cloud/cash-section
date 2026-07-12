@@ -57,6 +57,9 @@ export function GroupDashboard() {
   // tile alongside the other three, expanding on click instead of eating
   // vertical space by default.
   const [expandedPanel, setExpandedPanel] = useState<'spend' | 'expenses' | 'members' | 'passkey' | null>(null);
+  // Which member row (inside the Members panel) has its contribution total
+  // revealed. Only one at a time, mirroring the stat-card expand pattern.
+  const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
 
   const isAdmin = members.find((m) => m.user_id === user?.id)?.role === 'admin';
 
@@ -367,18 +370,34 @@ export function GroupDashboard() {
       {expandedPanel === 'members' ? (
         <div className="receipt-card p-4 mb-5">
           <p className="label-eyebrow mb-3">Group members</p>
-          <ul className="space-y-2.5">
-            {members.map((m) => (
-              <li key={m.user_id} className="flex items-center gap-2.5">
-                <span className="avatar-circle text-xs" aria-hidden>
-                  {m.profile?.username?.charAt(0)?.toUpperCase() ?? '•'}
-                </span>
-                <span className="text-sm text-ink-soft truncate flex-1">
-                  {m.user_id === user?.id ? 'You' : `@${m.profile?.username ?? 'member'}`}
-                </span>
-                {m.role === 'admin' ? <span className="status-pill bg-emerald-light text-emerald-dark">Admin</span> : null}
-              </li>
-            ))}
+          <p className="text-[11px] text-ink-faint mb-2 -mt-1">Tap a member to see what they've contributed.</p>
+          <ul className="space-y-1">
+            {members.map((m) => {
+              const contributed = expenses
+                .filter((e) => e.paid_by === m.user_id)
+                .reduce((sum, e) => sum + e.amount, 0);
+              const isOpen = expandedMemberId === m.user_id;
+              return (
+                <li key={m.user_id}>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedMemberId((v) => (v === m.user_id ? null : m.user_id))}
+                    className={`w-full flex items-center gap-2.5 text-left rounded px-1.5 py-1.5 -mx-1.5 transition-colors ${isOpen ? 'bg-ink/5' : ''}`}
+                  >
+                    <span className="avatar-circle text-xs" aria-hidden>
+                      {m.profile?.username?.charAt(0)?.toUpperCase() ?? '•'}
+                    </span>
+                    <span className="text-sm text-ink-soft truncate flex-1">
+                      {m.user_id === user?.id ? 'You' : `@${m.profile?.username ?? 'member'}`}
+                    </span>
+                    {m.role === 'admin' ? <span className="status-pill bg-emerald-light text-emerald-dark">Admin</span> : null}
+                    {isOpen ? (
+                      <span className="font-mono text-sm shrink-0 text-emerald">{formatCurrency(contributed, currency)}</span>
+                    ) : null}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}
