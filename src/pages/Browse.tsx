@@ -76,7 +76,7 @@ export function Browse() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
+    <div className="min-h-dvh flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="receipt-card p-7 text-center">
           <div className="w-14 h-14 rounded-full bg-emerald-light border border-emerald/40 flex items-center justify-center mx-auto mb-4 text-2xl">
