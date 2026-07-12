@@ -289,7 +289,7 @@ export function GroupDashboard() {
         </div>
       </div>
 
-      <div className={`grid ${isAdmin ? 'grid-cols-4' : 'grid-cols-3'} gap-3 mb-3`}>
+      <div className={`grid grid-cols-2 ${isAdmin ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-3 mb-3`}>
         <button
           type="button"
           onClick={() => setExpandedPanel((v) => (v === 'spend' ? null : 'spend'))}
