@@ -13,7 +13,7 @@ export function ProtectedRoute({ children, requireFull }: { children: ReactNode;
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-dvh flex items-center justify-center">
         <p className="label-eyebrow">Loading…</p>
       </div>
     );
