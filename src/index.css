@@ -150,6 +150,10 @@
   }
 
   .fab {
-    @apply fixed bottom-5 right-5 z-20 w-14 h-14 rounded-full bg-emerald text-paper flex items-center justify-center text-2xl shadow-glow hover:bg-emerald-dark transition-colors;
+    @apply fixed right-5 z-20 w-14 h-14 rounded-full bg-emerald text-paper flex items-center justify-center text-2xl shadow-glow hover:bg-emerald-dark transition-colors;
+    /* Clear the home-indicator / gesture bar on notched phones instead of
+       sitting flush against it, which made the button feel tucked away
+       and hard to reach on mobile. */
+    bottom: calc(1.25rem + env(safe-area-inset-bottom));
   }
 }
