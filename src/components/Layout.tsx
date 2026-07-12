@@ -9,7 +9,7 @@ export function Layout({ children, back }: { children: ReactNode; back?: string 
   const isMasterActive = location.pathname.startsWith('/master');
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-dvh flex flex-col">
       <header className="sticky top-0 z-10 bg-paper/90 backdrop-blur border-b border-rule">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
