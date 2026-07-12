@@ -44,7 +44,17 @@ export function Layout({ children, back }: { children: ReactNode; back?: string 
                 @{profile.username}
               </span>
               <button
-                onClick={() => signOut()}
+                onClick={async () => {
+                  // signOut() immediately drops the user into a fresh
+                  // anonymous/guest session (so the app never dead-ends on a
+                  // signed-out screen for shared devices). Left alone, that
+                  // means clicking Sign out just routes back to the guest
+                  // passkey screen. Navigate to /login explicitly so signing
+                  // out actually lands on the real sign-in/create-account
+                  // screen, as intended.
+                  await signOut();
+                  navigate('/login');
+                }}
                 className="text-xs px-2.5 py-1.5 rounded-md border border-rule text-ink-faint hover:text-brick hover:border-brick/40 transition-colors whitespace-nowrap"
               >
                 Sign out
