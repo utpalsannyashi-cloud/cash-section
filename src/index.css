@@ -5,12 +5,18 @@
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
+    /* Hints the browser to hand two-finger gestures to JS instead of
+       handling pinch-zoom natively on the compositor thread — without this,
+       some mobile browsers zoom before the touchmove listener in main.tsx
+       ever gets a chance to preventDefault it. This alone previously had a
+       bug where a pinch could zoom IN but not back OUT; main.tsx now also
+       force-resets the zoom via the viewport meta tag as a safety net, so
+       that failure mode can't leave the page stuck anymore. */
+    touch-action: pan-x pan-y;
   }
-  /* Pinch-zoom is blocked via a JS multi-touch listener in main.tsx instead
-     of touch-action here — touch-action: pan-x pan-y has a documented bug
-     on some mobile browsers where it lets a pinch zoom IN through but then
-     blocks the pinch back OUT, leaving the page stuck zoomed with no way
-     to recover. The JS listener stops the gesture before it starts. */
+  body {
+    touch-action: pan-x pan-y;
+  }
   ::selection {
     background: theme('colors.emerald.light');
   }
