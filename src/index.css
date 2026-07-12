@@ -5,14 +5,12 @@
 @layer base {
   html {
     -webkit-tap-highlight-color: transparent;
-    /* Belt-and-braces alongside the viewport meta tag: some mobile browsers
-       (notably Chrome on Android) still allow pinch-zoom unless touch-action
-       also blocks it. pan-x/pan-y keep normal scrolling working. */
-    touch-action: pan-x pan-y;
   }
-  body {
-    touch-action: pan-x pan-y;
-  }
+  /* Pinch-zoom is blocked via a JS multi-touch listener in main.tsx instead
+     of touch-action here — touch-action: pan-x pan-y has a documented bug
+     on some mobile browsers where it lets a pinch zoom IN through but then
+     blocks the pinch back OUT, leaving the page stuck zoomed with no way
+     to recover. The JS listener stops the gesture before it starts. */
   ::selection {
     background: theme('colors.emerald.light');
   }
