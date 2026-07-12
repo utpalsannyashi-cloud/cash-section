@@ -1,5 +1,5 @@
 import { FormEvent, MouseEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
@@ -14,6 +14,7 @@ const CODE_PATTERN = /^[a-z0-9]{4,20}$/;
 
 export function Groups() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [groups, setGroups] = useState<GroupWithRole[]>([]);
   const [expenseTotals, setExpenseTotals] = useState<{ count: number; spend: number }>({ count: 0, spend: 0 });
   const [expensesOverview, setExpensesOverview] = useState<ExpenseOverview[]>([]);
@@ -40,6 +41,20 @@ export function Groups() {
   const [actionBusy, setActionBusy] = useState(false);
   const longPressTimer = useRef<number | null>(null);
   const longPressTriggered = useRef(false);
+
+  // AI insights FAB, mirroring the one inside a single group's dashboard.
+  // Here there's no single group in scope, so a lone group jumps straight
+  // to its insights chat; with more than one, a quick picker asks which
+  // group to ask about.
+  const [showInsightsPicker, setShowInsightsPicker] = useState(false);
+  const handleAskAi = () => {
+    if (groups.length === 0) return;
+    if (groups.length === 1) {
+      navigate(`/groups/${groups[0].id}/insights`);
+      return;
+    }
+    setShowInsightsPicker(true);
+  };
 
   const loadGroups = async () => {
     setLoading(true);
@@ -168,12 +183,19 @@ export function Groups() {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const { error: rpcError } = await supabase.rpc('join_group_by_code', {
+    // unlock_group_by_code checks the group's access_code (the same passkey
+    // shown/set in the admin's "Change passkey" menu and used by guests on
+    // the Browse screen) and adds the caller as a member. This used to call
+    // a stale join_group_by_code RPC that checked a different, unused
+    // invite_code column, so entering a real group passkey here always
+    // failed with "Invalid invite code" — including for another admin
+    // trying to join your group.
+    const { error: rpcError } = await supabase.rpc('unlock_group_by_code', {
       code: joinCode.trim().toLowerCase()
     });
     setBusy(false);
     if (rpcError) {
-      setError('Invalid invite code.');
+      setError('Invalid passkey.');
       return;
     }
     setJoinCode('');
@@ -610,6 +632,45 @@ export function Groups() {
             ) : null}
           </div>
         </div>
+      ) : null}
+
+      {showInsightsPicker ? (
+        <div className="fixed inset-0 bg-ink/40 flex items-end sm:items-center justify-center z-20 p-0 sm:p-4">
+          <div className="bg-paper w-full sm:max-w-sm sm:rounded-lg rounded-t-2xl overflow-y-auto max-h-[70vh]">
+            <div className="p-5 border-b border-rule flex items-center justify-between">
+              <h2 className="font-mono font-semibold">Ask about which group?</h2>
+              <button
+                onClick={() => setShowInsightsPicker(false)}
+                className="text-ink-faint hover:text-ink text-xl leading-none shrink-0"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-2">
+              {groups.map((g) => (
+                <button
+                  key={g.id}
+                  onClick={() => navigate(`/groups/${g.id}/insights`)}
+                  className="w-full text-left px-3 py-3 rounded-md hover:bg-ink/5 transition-colors text-sm"
+                >
+                  {g.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {groups.length > 0 ? (
+        <button
+          type="button"
+          onClick={handleAskAi}
+          aria-label="Ask the AI about spending patterns"
+          title="Ask the AI about spending patterns"
+          className="fab"
+        >
+          ✦
+        </button>
       ) : null}
     </Layout>
   );
