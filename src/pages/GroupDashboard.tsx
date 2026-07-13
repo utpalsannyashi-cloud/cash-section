@@ -8,9 +8,13 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { deriveTotals, simplifyDebts } from '@/utils/settlement';
 import { formatCurrency } from '@/utils/currency';
-import type { Expense, Group, GroupMember, Settlement } from '@/types';
+import type { ContributionSource, Expense, Group, GroupMember, Settlement } from '@/types';
 
 const CODE_PATTERN = /^[a-z0-9]{4,20}$/;
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+}
 
 /**
  * A group is now just one continuous shared ledger — there's no more
@@ -68,6 +72,14 @@ export function GroupDashboard() {
   const [removeMemberTarget, setRemoveMemberTarget] = useState<GroupMember | null>(null);
   const [removingMember, setRemovingMember] = useState(false);
   const [removeMemberError, setRemoveMemberError] = useState<string | null>(null);
+
+  // Admin-only: change when a member's cost-sharing "clock" starts (see
+  // migration 0014). Affects only future equal-split expenses — never
+  // rewrites expense_splits that already exist.
+  const [contributionEditTarget, setContributionEditTarget] = useState<GroupMember | null>(null);
+  const [contributionCustomDate, setContributionCustomDate] = useState('');
+  const [savingContribution, setSavingContribution] = useState(false);
+  const [contributionError, setContributionError] = useState<string | null>(null);
 
   const isAdmin = members.find((m) => m.user_id === user?.id)?.role === 'admin';
 
@@ -151,7 +163,13 @@ export function GroupDashboard() {
   }, [sessionIds.join(',')]);
 
   const totalSpend = expenses.reduce((sum, e) => sum + e.amount, 0);
-  const participants: ParticipantLike[] = members.map((m) => ({ user_id: m.user_id, profile: m.profile }));
+  // A member only counts toward NEW equal-split expenses once today's date
+  // reaches their contribution_start_date — lets an admin backdate liability
+  // to the group's founding, or delay it to a custom date, without touching
+  // any expense_splits rows already saved.
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const activeMembers = members.filter((m) => m.contribution_start_date <= todayStr);
+  const participants: ParticipantLike[] = activeMembers.map((m) => ({ user_id: m.user_id, profile: m.profile }));
 
   // Detail-panel data — computed from state already in memory, no extra queries.
   const paidByMember = [...members]
@@ -186,7 +204,7 @@ export function GroupDashboard() {
       .select('user_id, share, expense_id, expenses!inner(session_id)')
       .in('expenses.session_id', sessionIds);
 
-    const participantIds = members.map((m) => m.user_id);
+    const participantIds = activeMembers.map((m) => m.user_id);
     const totals = deriveTotals(participantIds, allExpenses ?? [], (allSplits as any) ?? []);
     const transfers = simplifyDebts(totals);
 
@@ -274,6 +292,44 @@ export function GroupDashboard() {
       return;
     }
     setRemoveMemberTarget(null);
+    load();
+  };
+
+  // Updates which preset drives a member's contribution start. For
+  // 'joined_at' and 'group_creation' we deliberately don't send a date —
+  // the trg_check_contribution_start trigger derives contribution_start_date
+  // server-side from joined_at / the group's created_at, so there's no risk
+  // of the client and DB disagreeing. Only 'custom' sends an explicit date,
+  // and the trigger still floors it at the group's creation date.
+  const handleUpdateContribution = async (source: ContributionSource) => {
+    if (!contributionEditTarget || !groupId) return;
+    if (source === 'custom' && !contributionCustomDate) {
+      setContributionError('Pick a date.');
+      return;
+    }
+    setSavingContribution(true);
+    setContributionError(null);
+
+    const update: { contribution_start_source: ContributionSource; contribution_start_date?: string } = {
+      contribution_start_source: source
+    };
+    if (source === 'custom') {
+      update.contribution_start_date = contributionCustomDate;
+    }
+
+    const { error } = await supabase
+      .from('group_members')
+      .update(update)
+      .eq('group_id', groupId)
+      .eq('user_id', contributionEditTarget.user_id);
+
+    setSavingContribution(false);
+    if (error) {
+      setContributionError(error.message);
+      return;
+    }
+    setContributionEditTarget(null);
+    setContributionCustomDate('');
     load();
   };
 
@@ -406,34 +462,59 @@ export function GroupDashboard() {
                 .filter((e) => e.paid_by === m.user_id)
                 .reduce((sum, e) => sum + e.amount, 0);
               const isOpen = expandedMemberId === m.user_id;
+              const isFuture = m.contribution_start_date > todayStr;
               return (
-                <li key={m.user_id} className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => setExpandedMemberId((v) => (v === m.user_id ? null : m.user_id))}
-                    className={`flex-1 min-w-0 flex items-center gap-2.5 text-left rounded px-1.5 py-1.5 -mx-1.5 transition-colors ${isOpen ? 'bg-ink/5' : ''}`}
-                  >
-                    <span className="avatar-circle text-xs" aria-hidden>
-                      {m.profile?.username?.charAt(0)?.toUpperCase() ?? '•'}
-                    </span>
-                    <span className="text-sm text-ink-soft truncate flex-1">
-                      {m.user_id === user?.id ? 'You' : `@${m.profile?.username ?? 'member'}`}
-                    </span>
-                    {m.role === 'admin' ? <span className="status-pill bg-emerald-light text-emerald-dark">Admin</span> : null}
-                    {isOpen ? (
-                      <span className="font-mono text-sm shrink-0 text-emerald">{formatCurrency(contributed, currency)}</span>
-                    ) : null}
-                  </button>
-                  {isAdmin && m.user_id !== user?.id ? (
+                <li key={m.user_id}>
+                  <div className="flex items-center gap-1">
                     <button
                       type="button"
-                      onClick={() => setRemoveMemberTarget(m)}
-                      aria-label={`Remove @${m.profile?.username ?? 'member'} from group`}
-                      title="Remove from group"
-                      className="text-ink-faint hover:text-brick text-lg leading-none px-1.5 py-1.5 shrink-0 transition-colors"
+                      onClick={() => setExpandedMemberId((v) => (v === m.user_id ? null : m.user_id))}
+                      className={`flex-1 min-w-0 flex items-center gap-2.5 text-left rounded px-1.5 py-1.5 -mx-1.5 transition-colors ${isOpen ? 'bg-ink/5' : ''}`}
                     >
-                      ×
+                      <span className="avatar-circle text-xs" aria-hidden>
+                        {m.profile?.username?.charAt(0)?.toUpperCase() ?? '•'}
+                      </span>
+                      <span className="text-sm text-ink-soft truncate flex-1">
+                        {m.user_id === user?.id ? 'You' : `@${m.profile?.username ?? 'member'}`}
+                      </span>
+                      {m.role === 'admin' ? <span className="status-pill bg-emerald-light text-emerald-dark">Admin</span> : null}
+                      {isOpen ? (
+                        <span className="font-mono text-sm shrink-0 text-emerald">{formatCurrency(contributed, currency)}</span>
+                      ) : null}
                     </button>
+                    {isAdmin && m.user_id !== user?.id ? (
+                      <button
+                        type="button"
+                        onClick={() => setRemoveMemberTarget(m)}
+                        aria-label={`Remove @${m.profile?.username ?? 'member'} from group`}
+                        title="Remove from group"
+                        className="text-ink-faint hover:text-brick text-lg leading-none px-1.5 py-1.5 shrink-0 transition-colors"
+                      >
+                        ×
+                      </button>
+                    ) : null}
+                  </div>
+                  {isOpen ? (
+                    <div className="flex items-center justify-between gap-2 pl-9 pr-1.5 pb-1">
+                      <span className="text-[11px] text-ink-faint">
+                        {isFuture
+                          ? `Starts contributing ${formatDate(m.contribution_start_date)}`
+                          : `Contributing since ${formatDate(m.contribution_start_date)}`}
+                      </span>
+                      {isAdmin ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setContributionEditTarget(m);
+                            setContributionCustomDate(m.contribution_start_date);
+                            setContributionError(null);
+                          }}
+                          className="text-[11px] text-emerald hover:underline shrink-0"
+                        >
+                          Change
+                        </button>
+                      ) : null}
+                    </div>
                   ) : null}
                 </li>
               );
@@ -486,6 +567,69 @@ export function GroupDashboard() {
         </div>
       ) : null}
 
+      {contributionEditTarget ? (
+        <div className="fixed inset-0 bg-ink/40 flex items-end sm:items-center justify-center z-20 p-0 sm:p-4">
+          <div className="bg-paper w-full sm:max-w-sm sm:rounded-lg rounded-t-2xl overflow-y-auto">
+            <div className="p-5 border-b border-rule flex items-center justify-between">
+              <h2 className="font-mono font-semibold">Contribution start</h2>
+              <button
+                onClick={() => {
+                  setContributionEditTarget(null);
+                  setContributionCustomDate('');
+                  setContributionError(null);
+                }}
+                className="text-ink-faint hover:text-ink text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-ink-soft">
+                When should{' '}
+                <span className="text-ink font-medium">
+                  @{contributionEditTarget.profile?.username ?? 'this member'}
+                </span>{' '}
+                start being included in new expenses? This only affects expenses added from now on — nothing already
+                in the ledger changes.
+              </p>
+              {contributionError ? <p className="text-brick text-sm">{contributionError}</p> : null}
+              <div className="space-y-2">
+                <button
+                  onClick={() => handleUpdateContribution('joined_at')}
+                  disabled={savingContribution}
+                  className="btn-secondary w-full text-left"
+                >
+                  Since they joined ({formatDate(contributionEditTarget.joined_at)})
+                </button>
+                <button
+                  onClick={() => handleUpdateContribution('group_creation')}
+                  disabled={savingContribution}
+                  className="btn-secondary w-full text-left"
+                >
+                  Since the group was created ({formatDate(group.created_at)})
+                </button>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={contributionCustomDate}
+                    min={group.created_at.slice(0, 10)}
+                    onChange={(e) => setContributionCustomDate(e.target.value)}
+                    className="input-field flex-1"
+                  />
+                  <button
+                    onClick={() => handleUpdateContribution('custom')}
+                    disabled={savingContribution}
+                    className="btn-primary shrink-0"
+                  >
+                    {savingContribution ? 'Saving…' : 'Set date'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {expandedPanel === 'passkey' && isAdmin ? (
         <div className="receipt-card px-3 py-2 mb-5">
           <div className="flex items-center justify-between gap-2">
@@ -496,7 +640,7 @@ export function GroupDashboard() {
                 title="Share this so guests can jump straight into this group without an account."
                 className="font-mono text-xs text-emerald hover:underline truncate"
               >
-                {copiedCode ? 'Copied!' : group.access_code}
+                {copiedCode ? 'Copied!'! : group.access_code}
               </button>
             </div>
             <div className="flex items-center gap-3 shrink-0">
