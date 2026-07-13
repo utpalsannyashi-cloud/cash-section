@@ -61,6 +61,14 @@ export function GroupDashboard() {
   // revealed. Only one at a time, mirroring the stat-card expand pattern.
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
 
+  // Admin-only: remove a member from the group. RLS already permits this
+  // (group_members_delete_admin_or_self), so this is purely a UI addition —
+  // their past expenses stay in the ledger since expenses reference the
+  // profile, not the membership row.
+  const [removeMemberTarget, setRemoveMemberTarget] = useState<GroupMember | null>(null);
+  const [removingMember, setRemovingMember] = useState(false);
+  const [removeMemberError, setRemoveMemberError] = useState<string | null>(null);
+
   const isAdmin = members.find((m) => m.user_id === user?.id)?.role === 'admin';
 
   const load = useCallback(async () => {
@@ -251,6 +259,24 @@ export function GroupDashboard() {
     load();
   };
 
+  const handleRemoveMember = async () => {
+    if (!removeMemberTarget || !groupId) return;
+    setRemovingMember(true);
+    setRemoveMemberError(null);
+    const { error } = await supabase
+      .from('group_members')
+      .delete()
+      .eq('group_id', groupId)
+      .eq('user_id', removeMemberTarget.user_id);
+    setRemovingMember(false);
+    if (error) {
+      setRemoveMemberError(error.message);
+      return;
+    }
+    setRemoveMemberTarget(null);
+    load();
+  };
+
   const handleDeleteGroup = async () => {
     if (!groupId || !group) return;
     setDeletingGroup(true);
@@ -370,7 +396,10 @@ export function GroupDashboard() {
       {expandedPanel === 'members' ? (
         <div className="receipt-card p-4 mb-5">
           <p className="label-eyebrow mb-3">Group members</p>
-          <p className="text-[11px] text-ink-faint mb-2 -mt-1">Tap a member to see what they've contributed.</p>
+          <p className="text-[11px] text-ink-faint mb-2 -mt-1">
+            Tap a member to see what they've contributed.
+            {isAdmin ? ' Admins can also remove a member from the group.' : ''}
+          </p>
           <ul className="space-y-1">
             {members.map((m) => {
               const contributed = expenses
@@ -378,11 +407,11 @@ export function GroupDashboard() {
                 .reduce((sum, e) => sum + e.amount, 0);
               const isOpen = expandedMemberId === m.user_id;
               return (
-                <li key={m.user_id}>
+                <li key={m.user_id} className="flex items-center gap-1">
                   <button
                     type="button"
                     onClick={() => setExpandedMemberId((v) => (v === m.user_id ? null : m.user_id))}
-                    className={`w-full flex items-center gap-2.5 text-left rounded px-1.5 py-1.5 -mx-1.5 transition-colors ${isOpen ? 'bg-ink/5' : ''}`}
+                    className={`flex-1 min-w-0 flex items-center gap-2.5 text-left rounded px-1.5 py-1.5 -mx-1.5 transition-colors ${isOpen ? 'bg-ink/5' : ''}`}
                   >
                     <span className="avatar-circle text-xs" aria-hidden>
                       {m.profile?.username?.charAt(0)?.toUpperCase() ?? '•'}
@@ -395,10 +424,65 @@ export function GroupDashboard() {
                       <span className="font-mono text-sm shrink-0 text-emerald">{formatCurrency(contributed, currency)}</span>
                     ) : null}
                   </button>
+                  {isAdmin && m.user_id !== user?.id ? (
+                    <button
+                      type="button"
+                      onClick={() => setRemoveMemberTarget(m)}
+                      aria-label={`Remove @${m.profile?.username ?? 'member'} from group`}
+                      title="Remove from group"
+                      className="text-ink-faint hover:text-brick text-lg leading-none px-1.5 py-1.5 shrink-0 transition-colors"
+                    >
+                      ×
+                    </button>
+                  ) : null}
                 </li>
               );
             })}
           </ul>
+        </div>
+      ) : null}
+
+      {removeMemberTarget ? (
+        <div className="fixed inset-0 bg-ink/40 flex items-end sm:items-center justify-center z-20 p-0 sm:p-4">
+          <div className="bg-paper w-full sm:max-w-sm sm:rounded-lg rounded-t-2xl overflow-y-auto">
+            <div className="p-5 border-b border-rule flex items-center justify-between">
+              <h2 className="font-mono font-semibold">Remove member</h2>
+              <button
+                onClick={() => {
+                  setRemoveMemberTarget(null);
+                  setRemoveMemberError(null);
+                }}
+                className="text-ink-faint hover:text-ink text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-ink-soft">
+                Remove{' '}
+                <span className="text-ink font-medium">
+                  @{removeMemberTarget.profile?.username ?? 'this member'}
+                </span>{' '}
+                from "{group.name}"? They'll need the group passkey again to rejoin — their past expenses stay in
+                the ledger.
+              </p>
+              {removeMemberError ? <p className="text-brick text-sm">{removeMemberError}</p> : null}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setRemoveMemberTarget(null);
+                    setRemoveMemberError(null);
+                  }}
+                  className="btn-secondary flex-1"
+                >
+                  Cancel
+                </button>
+                <button onClick={handleRemoveMember} disabled={removingMember} className="btn-danger flex-1">
+                  {removingMember ? 'Removing…' : 'Remove'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       ) : null}
 
