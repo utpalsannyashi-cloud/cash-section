@@ -46,14 +46,16 @@ export function Layout({ children, back }: { children: ReactNode; back?: string 
               <button
                 onClick={async () => {
                   // signOut() immediately drops the user into a fresh
-                  // anonymous/guest session (so the app never dead-ends on a
-                  // signed-out screen for shared devices). Left alone, that
-                  // means clicking Sign out just routes back to the guest
-                  // passkey screen. Navigate to /login explicitly so signing
-                  // out actually lands on the real sign-in/create-account
-                  // screen, as intended.
+                  // anonymous/guest session. The intended landing spot after
+                  // sign-out is the guest "what's your name? / group passkey"
+                  // screen (Home -> Browse), not the admin login form — but
+                  // if sign-out happened on a requireFull route (e.g. /groups)
+                  // ProtectedRoute would otherwise bounce the fresh guest
+                  // session straight to /login before Home ever got a look.
+                  // Navigating to / explicitly routes through Home's
+                  // isGuest check every time, landing on Browse as expected.
                   await signOut();
-                  navigate('/login');
+                  navigate('/');
                 }}
                 className="text-xs px-2.5 py-1.5 rounded-md border border-rule text-ink-faint hover:text-brick hover:border-brick/40 transition-colors whitespace-nowrap"
               >
