@@ -2,7 +2,7 @@ export type Role = 'admin' | 'member';
 export type SessionStatus = 'open' | 'settled';
 export type SplitType = 'equal' | 'custom' | 'percentage';
 export type Category = 'Food' | 'Travel' | 'Stay' | 'Shopping' | 'Misc';
-export type ContributionSource = 'joined_at' | 'group_creation' | 'custom';
+export type ContributionSource = 'joined_at' | 'group_creation' | 'custom' | 'expense';
 
 export interface Profile {
   id: string;
@@ -27,6 +27,7 @@ export interface GroupMember {
   joined_at: string;
   contribution_start_date: string;
   contribution_start_source: ContributionSource;
+  contribution_start_expense_id: string | null;
   profile?: Profile;
 }
 
