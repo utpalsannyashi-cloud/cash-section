@@ -94,6 +94,15 @@ export function simplifyDebts(totals: PersonTotals[]): Transfer[] {
 /**
  * Convenience helper: derive PersonTotals from raw expense + split rows,
  * as they'd come back from Supabase.
+ *
+ * Expense/split rows can reference someone who is no longer a group
+ * member (an admin removed them after expenses were already logged —
+ * see handleRemoveMember in GroupDashboard.tsx, which deliberately
+ * leaves past expense_splits untouched). Rather than silently dropping
+ * what a departed member still owed — which would understate what the
+ * payer is actually owed back — their net deficit (owed minus whatever
+ * they themselves paid) is folded evenly across the current
+ * participantIds, the same way a fresh expense would be split.
  */
 export function deriveTotals(
   participantIds: string[],
@@ -114,6 +123,30 @@ export function deriveTotals(
 
   for (const s of splits) {
     owedMap.set(s.user_id, (owedMap.get(s.user_id) ?? 0) + s.share);
+  }
+
+  const participantSet = new Set(participantIds);
+  const allUserIds = new Set([...paidMap.keys(), ...owedMap.keys()]);
+
+  let orphanedDeficitCents = 0;
+  for (const userId of allUserIds) {
+    if (participantSet.has(userId)) continue;
+    const paid = paidMap.get(userId) ?? 0;
+    const owed = owedMap.get(userId) ?? 0;
+    if (owed > paid) orphanedDeficitCents += toCents(owed) - toCents(paid);
+  }
+
+  if (orphanedDeficitCents > 0 && participantIds.length > 0) {
+    const base = Math.floor(orphanedDeficitCents / participantIds.length);
+    let remainder = orphanedDeficitCents - base * participantIds.length;
+    for (const id of participantIds) {
+      let cents = base;
+      if (remainder > 0) {
+        cents += 1;
+        remainder -= 1;
+      }
+      owedMap.set(id, (owedMap.get(id) ?? 0) + toRupees(cents));
+    }
   }
 
   return participantIds.map((userId) => ({
