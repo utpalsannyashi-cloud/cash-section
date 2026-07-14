@@ -109,4 +109,34 @@ describe('deriveTotals', () => {
     expect(totals.find((t) => t.userId === 'B')).toEqual({ userId: 'B', paid: 150, owed: 200 });
     expect(totals.find((t) => t.userId === 'C')).toEqual({ userId: 'C', paid: 0, owed: 100 });
   });
+
+  it('redistributes a removed member\'s leftover share across current participants instead of dropping it', () => {
+    // D was in the group when these expenses were split, but has since
+    // been removed (see handleRemoveMember) — their expense_splits rows
+    // are untouched, but they no longer appear in participantIds.
+    const totals = deriveTotals(
+      ['A', 'B'],
+      [{ paid_by: 'A', amount: 7500 }],
+      [
+        { expense_id: 'e1', user_id: 'A', share: 666.67 },
+        { expense_id: 'e1', user_id: 'B', share: 666.66 },
+        { expense_id: 'e1', user_id: 'D', share: 666.67 },
+        { expense_id: 'e2', user_id: 'A', share: 1833.34 },
+        { expense_id: 'e2', user_id: 'B', share: 1833.33 },
+        { expense_id: 'e2', user_id: 'D', share: 1833.33 }
+      ]
+    );
+
+    // D's total owed (2500.00) is split evenly across A and B (1250 each)
+    // on top of what they already owed themselves, rather than vanishing.
+    const a = totals.find((t) => t.userId === 'A')!;
+    const b = totals.find((t) => t.userId === 'B')!;
+    expect(a.owed).toBeCloseTo(666.67 + 1833.34 + 1250, 2);
+    expect(b.owed).toBeCloseTo(666.66 + 1833.33 + 1250, 2);
+    expect(totals.some((t) => t.userId === 'D')).toBe(false);
+
+    // Every rupee originally paid should still be fully collectible.
+    const totalOwed = a.owed + b.owed;
+    expect(totalOwed).toBeCloseTo(7500, 2);
+  });
 });
