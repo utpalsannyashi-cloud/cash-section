@@ -27,6 +27,11 @@ interface Props {
   onCurrencyChange?: (currency: string) => void | Promise<void>;
   participants: ParticipantLike[]; // everyone the expense is split across (all current group members)
   currentUserId: string;
+  /** Admins get a "Paid by" picker so they can log an expense on someone
+   *  else's behalf (e.g. entering a bill from a printed receipt, or
+   *  backfilling something a member forgot to add themselves). Everyone
+   *  else always pays as themselves, same as before. */
+  isAdmin?: boolean;
   onClose: () => void;
   onSaved: () => void;
   /** When provided, the modal edits this expense instead of creating a new one. */
@@ -68,6 +73,7 @@ export function AddExpenseModal({
   onCurrencyChange,
   participants,
   currentUserId,
+  isAdmin,
   onClose,
   onSaved,
   editingExpense
@@ -78,10 +84,28 @@ export function AddExpenseModal({
   const [description, setDescription] = useState(() => editingExpense?.description ?? '');
   const [selectedCurrency, setSelectedCurrency] = useState(currency || 'INR');
   const [attachmentPath, setAttachmentPath] = useState<string | null>(editingExpense?.attachment_path ?? null);
+  const [paidBy, setPaidBy] = useState(() => editingExpense?.paid_by ?? currentUserId);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const numericAmount = parseFloat(amount) || 0;
+
+  // Whoever's currently splitting the expense, plus (when editing) whoever
+  // already paid it even if they're no longer an active participant — so
+  // an admin never loses track of who a past expense was actually paid by.
+  const payerOptions: { userId: string; label: string }[] = (() => {
+    const seen = new Map<string, string>();
+    for (const p of participants) {
+      seen.set(p.user_id, p.user_id === currentUserId ? 'You' : `@${p.profile?.username ?? 'member'}`);
+    }
+    if (editingExpense && !seen.has(editingExpense.paid_by)) {
+      seen.set(
+        editingExpense.paid_by,
+        editingExpense.paid_by === currentUserId ? 'You' : `@${editingExpense.payer?.username ?? 'former member'}`
+      );
+    }
+    return Array.from(seen.entries()).map(([userId, label]) => ({ userId, label }));
+  })();
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -113,7 +137,7 @@ export function AddExpenseModal({
         p_description: description,
         p_amount: numericAmount,
         p_category: editingExpense.category,
-        p_paid_by: editingExpense.paid_by,
+        p_paid_by: paidBy,
         p_split_type: 'equal',
         p_attachment_path: attachmentPath,
         p_splits: Object.entries(shares).map(([userId, share]) => ({ user_id: userId, share }))
@@ -132,7 +156,7 @@ export function AddExpenseModal({
       .from('expenses')
       .insert({
         session_id: sessionId,
-        paid_by: currentUserId,
+        paid_by: paidBy,
         amount: numericAmount,
         description,
         category: 'Misc',
@@ -216,6 +240,23 @@ export function AddExpenseModal({
               />
             </div>
           </div>
+
+          {isAdmin ? (
+            <div>
+              <label className="label-eyebrow block mb-1.5">Paid by</label>
+              <select
+                value={paidBy}
+                onChange={(e) => setPaidBy(e.target.value)}
+                className="input-field"
+              >
+                {payerOptions.map((o) => (
+                  <option key={o.userId} value={o.userId}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
 
           <p className="text-xs text-ink-faint">
             Split evenly across all {participants.length} group member{participants.length === 1 ? '' : 's'}
