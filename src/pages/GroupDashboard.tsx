@@ -80,6 +80,10 @@ export function GroupDashboard() {
   const [contributionCustomDate, setContributionCustomDate] = useState('');
   const [savingContribution, setSavingContribution] = useState(false);
   const [contributionError, setContributionError] = useState<string | null>(null);
+  // Toggles the "From a specific expense" sub-list inside the contribution
+  // modal (see migration 0015) — kept separate from the other three presets
+  // since it needs to show a scrollable pick-list rather than a single tap.
+  const [showExpensePicker, setShowExpensePicker] = useState(false);
 
   const isAdmin = members.find((m) => m.user_id === user?.id)?.role === 'admin';
 
@@ -179,6 +183,15 @@ export function GroupDashboard() {
     }))
     .sort((a, b) => b.total - a.total);
   const recentExpenses = expenses.slice(0, 5);
+
+  // Looks up the description of the expense a member's contribution is
+  // pinned to (contribution_start_source === 'expense'), so the Members
+  // panel can show something more specific than just a date. Falls back to
+  // undefined if the expense isn't in the currently loaded list (e.g. it
+  // was since deleted — contribution_start_expense_id would already be
+  // null in that case, since the column is ON DELETE SET NULL).
+  const contributionStartExpenseLabel = (m: GroupMember): string | undefined =>
+    expenses.find((e) => e.id === m.contribution_start_expense_id)?.description;
 
   const handleDeleteExpense = async (id: string) => {
     await supabase.from('expenses').delete().eq('id', id);
@@ -330,6 +343,34 @@ export function GroupDashboard() {
     }
     setContributionEditTarget(null);
     setContributionCustomDate('');
+    load();
+  };
+
+  // Unlike handleUpdateContribution above, this one rewrites history: the
+  // RPC recomputes the equal split on the chosen expense and every expense
+  // on or after it (across the whole group) to include this member,
+  // shrinking everyone else's share so the totals still add up — see
+  // migration 0015 for why date-only granularity can't express "starting
+  // from this one, not that one" when several expenses share a date.
+  const handleSetContributionFromExpense = async (expenseId: string) => {
+    if (!contributionEditTarget || !groupId) return;
+    setSavingContribution(true);
+    setContributionError(null);
+
+    const { error } = await supabase.rpc('set_member_contribution_from_expense', {
+      p_group_id: groupId,
+      p_user_id: contributionEditTarget.user_id,
+      p_expense_id: expenseId
+    });
+
+    setSavingContribution(false);
+    if (error) {
+      setContributionError(error.message);
+      return;
+    }
+    setContributionEditTarget(null);
+    setContributionCustomDate('');
+    setShowExpensePicker(false);
     load();
   };
 
@@ -497,9 +538,11 @@ export function GroupDashboard() {
                   {isOpen ? (
                     <div className="flex items-center justify-between gap-2 pl-9 pr-1.5 pb-1">
                       <span className="text-[11px] text-ink-faint">
-                        {isFuture
-                          ? `Starts contributing ${formatDate(m.contribution_start_date)}`
-                          : `Contributing since ${formatDate(m.contribution_start_date)}`}
+                        {m.contribution_start_source === 'expense' && contributionStartExpenseLabel(m)
+                          ? `Contributing since "${contributionStartExpenseLabel(m)}"`
+                          : isFuture
+                            ? `Starts contributing ${formatDate(m.contribution_start_date)}`
+                            : `Contributing since ${formatDate(m.contribution_start_date)}`}
                       </span>
                       {isAdmin ? (
                         <button
@@ -508,6 +551,7 @@ export function GroupDashboard() {
                             setContributionEditTarget(m);
                             setContributionCustomDate(m.contribution_start_date);
                             setContributionError(null);
+                            setShowExpensePicker(false);
                           }}
                           className="text-[11px] text-emerald hover:underline shrink-0"
                         >
@@ -577,6 +621,7 @@ export function GroupDashboard() {
                   setContributionEditTarget(null);
                   setContributionCustomDate('');
                   setContributionError(null);
+                  setShowExpensePicker(false);
                 }}
                 className="text-ink-faint hover:text-ink text-xl leading-none"
               >
@@ -589,42 +634,85 @@ export function GroupDashboard() {
                 <span className="text-ink font-medium">
                   @{contributionEditTarget.profile?.username ?? 'this member'}
                 </span>{' '}
-                start being included in new expenses? This only affects expenses added from now on — nothing already
-                in the ledger changes.
+                start being included in expenses?{' '}
+                {showExpensePicker
+                  ? "Picking an expense below backfills their share into it and everything after — this is the one option that rewrites existing splits."
+                  : 'The presets below only affect expenses added from now on — nothing already in the ledger changes.'}
               </p>
               {contributionError ? <p className="text-brick text-sm">{contributionError}</p> : null}
-              <div className="space-y-2">
-                <button
-                  onClick={() => handleUpdateContribution('joined_at')}
-                  disabled={savingContribution}
-                  className="btn-secondary w-full text-left"
-                >
-                  Since they joined ({formatDate(contributionEditTarget.joined_at)})
-                </button>
-                <button
-                  onClick={() => handleUpdateContribution('group_creation')}
-                  disabled={savingContribution}
-                  className="btn-secondary w-full text-left"
-                >
-                  Since the group was created ({formatDate(group.created_at)})
-                </button>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="date"
-                    value={contributionCustomDate}
-                    min={group.created_at.slice(0, 10)}
-                    onChange={(e) => setContributionCustomDate(e.target.value)}
-                    className="input-field flex-1"
-                  />
+              {showExpensePicker ? (
+                <div className="space-y-2">
+                  {expenses.length === 0 ? (
+                    <p className="text-sm text-ink-soft">No expenses logged yet.</p>
+                  ) : (
+                    <ul className="space-y-1 max-h-52 overflow-y-auto -mx-1 px-1">
+                      {expenses.map((e) => (
+                        <li key={e.id}>
+                          <button
+                            type="button"
+                            onClick={() => handleSetContributionFromExpense(e.id)}
+                            disabled={savingContribution}
+                            className="w-full text-left rounded px-2 py-2 hover:bg-ink/5 transition-colors"
+                          >
+                            <span className="text-sm text-ink-soft block truncate">{e.description}</span>
+                            <span className="text-[11px] text-ink-faint">
+                              {formatDate(e.created_at)} · {formatCurrency(e.amount, currency)}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                   <button
-                    onClick={() => handleUpdateContribution('custom')}
-                    disabled={savingContribution}
-                    className="btn-primary shrink-0"
+                    type="button"
+                    onClick={() => setShowExpensePicker(false)}
+                    className="btn-secondary w-full"
                   >
-                    {savingContribution ? 'Saving…' : 'Set date'}
+                    Back
                   </button>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-2">
+                  <button
+                    onClick={() => handleUpdateContribution('joined_at')}
+                    disabled={savingContribution}
+                    className="btn-secondary w-full text-left"
+                  >
+                    Since they joined ({formatDate(contributionEditTarget.joined_at)})
+                  </button>
+                  <button
+                    onClick={() => handleUpdateContribution('group_creation')}
+                    disabled={savingContribution}
+                    className="btn-secondary w-full text-left"
+                  >
+                    Since the group was created ({formatDate(group.created_at)})
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={contributionCustomDate}
+                      min={group.created_at.slice(0, 10)}
+                      onChange={(e) => setContributionCustomDate(e.target.value)}
+                      className="input-field flex-1"
+                    />
+                    <button
+                      onClick={() => handleUpdateContribution('custom')}
+                      disabled={savingContribution}
+                      className="btn-primary shrink-0"
+                    >
+                      {savingContribution ? 'Saving…' : 'Set date'}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowExpensePicker(true)}
+                    disabled={savingContribution}
+                    className="btn-secondary w-full text-left"
+                  >
+                    From a specific expense…
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -640,7 +728,7 @@ export function GroupDashboard() {
                 title="Share this so guests can jump straight into this group without an account."
                 className="font-mono text-xs text-emerald hover:underline truncate"
               >
-                {copiedCode ? 'Copied!'! : group.access_code}
+                {copiedCode ? 'Copied!' : group.access_code}
               </button>
             </div>
             <div className="flex items-center gap-3 shrink-0">
@@ -785,6 +873,7 @@ export function GroupDashboard() {
           onCurrencyChange={handleCurrencyChange}
           participants={participants}
           currentUserId={user.id}
+          isAdmin={isAdmin}
           editingExpense={editingExpense ?? undefined}
           onClose={closeExpenseModal}
           onSaved={() => {
