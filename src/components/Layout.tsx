@@ -1,9 +1,11 @@
 import { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import { useTheme } from '@/context/ThemeContext';
 
 export function Layout({ children, back }: { children: ReactNode; back?: string }) {
   const { profile, signOut, isGuest, isMasterAdmin } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const isMasterActive = location.pathname.startsWith('/master');
@@ -26,6 +28,15 @@ export function Layout({ children, back }: { children: ReactNode; back?: string 
               Cash<span className="text-emerald">§</span>ection
             </Link>
           </div>
+          <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            className="w-8 h-8 flex items-center justify-center rounded-md border border-rule text-ink-faint hover:text-ink hover:border-ink/30 transition-colors shrink-0"
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
           {profile && !isGuest ? (
             <div className="flex items-center gap-2 sm:gap-3">
               {isMasterAdmin ? (
@@ -67,6 +78,7 @@ export function Layout({ children, back }: { children: ReactNode; back?: string 
               Admin sign in
             </Link>
           )}
+          </div>
         </div>
       </header>
       <main className="flex-1 max-w-2xl w-full mx-auto px-4 py-6">{children}</main>
