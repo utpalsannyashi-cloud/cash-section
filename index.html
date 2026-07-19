@@ -2,6 +2,19 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // Set the theme before first paint so switching to light mode
+      // doesn't flash the dark theme for a frame. Mirrors the default in
+      // src/context/ThemeContext.tsx (dark, unless explicitly toggled).
+      (function () {
+        try {
+          var stored = localStorage.getItem('cash-section-theme');
+          document.documentElement.setAttribute('data-theme', stored === 'light' ? 'light' : 'dark');
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }
+      })();
+    </script>
     <!--
       Deliberately NOT using maximum-scale=1/user-scalable=no here: those
       attributes are known to break normal touch-scrolling on a range of
