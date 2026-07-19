@@ -2,11 +2,66 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme tokens as raw "R G B" triplets (not hex) so Tailwind's opacity
+   modifiers, e.g. bg-emerald/10, can slot an alpha value in via
+   rgb(var(--color-x) / <alpha-value>) - see tailwind.config.js. The
+   [data-theme] attribute is set on <html> by ThemeContext (and, before
+   React hydrates, by the inline anti-flash script in index.html), so
+   :root's values are just the dark-mode default/fallback. */
+:root,
+[data-theme='dark'] {
+  --color-paper: 15 23 42;
+  --color-paper-dim: 11 18 32;
+  --color-paper-card: 30 41 59;
+  --color-ink: 226 232 240;
+  --color-ink-soft: 148 163 184;
+  --color-ink-faint: 100 116 139;
+  --color-emerald: 16 185 129;
+  --color-emerald-dark: 4 120 87;
+  --color-emerald-light: 18 61 46;
+  --color-brick: 248 250 252;
+  --color-brick-light: 30 41 59;
+  --color-violet: 226 232 240;
+  --color-violet-dark: 148 163 184;
+  --color-violet-light: 30 41 59;
+  --color-amber: 248 250 252;
+  --color-amber-dark: 203 213 225;
+  --color-amber-light: 11 18 32;
+  --color-rule: 39 54 74;
+}
+
+[data-theme='light'] {
+  --color-paper: 241 245 249;
+  --color-paper-dim: 226 232 240;
+  --color-paper-card: 255 255 255;
+  --color-ink: 15 23 42;
+  --color-ink-soft: 71 85 105;
+  --color-ink-faint: 148 163 184;
+  --color-emerald: 4 120 87;
+  --color-emerald-dark: 6 95 70;
+  --color-emerald-light: 209 250 229;
+  --color-brick: 15 23 42;
+  --color-brick-light: 226 232 240;
+  --color-violet: 30 41 59;
+  --color-violet-dark: 71 85 105;
+  --color-violet-light: 226 232 240;
+  --color-amber: 15 23 42;
+  --color-amber-dark: 71 85 105;
+  --color-amber-light: 226 232 240;
+  --color-rule: 203 213 225;
+}
+
 @layer base {
+  html[data-theme='dark'] {
+    color-scheme: dark;
+  }
+  html[data-theme='light'] {
+    color-scheme: light;
+  }
   html {
     -webkit-tap-highlight-color: transparent;
     /* Hints the browser to hand two-finger gestures to JS instead of
-       handling pinch-zoom natively on the compositor thread — without this,
+       handling pinch-zoom natively on the compositor thread - without this,
        some mobile browsers zoom before the touchmove listener in main.tsx
        ever gets a chance to preventDefault it. This alone previously had a
        bug where a pinch could zoom IN but not back OUT; main.tsx now also
@@ -16,16 +71,17 @@
   }
   body {
     touch-action: pan-x pan-y;
+    transition: background-color 0.15s ease, color 0.15s ease;
   }
   ::selection {
-    background: theme('colors.emerald.light');
+    background: rgb(var(--color-emerald-light));
   }
   :focus-visible {
-    outline: 2px solid theme('colors.emerald.DEFAULT');
+    outline: 2px solid rgb(var(--color-emerald));
     outline-offset: 2px;
   }
   /* The browser's default up/down number-input stepper renders as a light,
-     OS-styled widget that clashes with the dark flat theme — drop it so
+     OS-styled widget that clashes with the dark flat theme - drop it so
      amount fields look like every other input in the app. */
   input[type='number']::-webkit-outer-spin-button,
   input[type='number']::-webkit-inner-spin-button {
