@@ -4,7 +4,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Dark navy + electric blue theme. Token names (paper/ink/emerald/
+        // Dark navy + green theme. Token names (paper/ink/emerald/
         // brick/rule) are kept as-is so every component that already
         // references them just picks up the new palette automatically.
         paper: {
@@ -18,9 +18,9 @@ export default {
           faint: '#64748B'
         },
         emerald: {
-          DEFAULT: '#3B82F6',
-          dark: '#2563EB',
-          light: '#1E3A5F'
+          DEFAULT: '#10B981',
+          dark: '#047857',
+          light: '#123D2E'
         },
         brick: {
           DEFAULT: '#F87171',
@@ -47,7 +47,7 @@ export default {
           'repeating-linear-gradient(to right, transparent 0 6px, #27364A 6px 8px)'
       },
       boxShadow: {
-        glow: '0 0 0 1px rgba(59,130,246,0.4), 0 8px 24px -8px rgba(59,130,246,0.35)',
+        glow: '0 0 0 1px rgba(16,185,129,0.4), 0 8px 24px -8px rgba(16,185,129,0.35)',
         glowViolet: '0 0 0 1px rgba(139,92,246,0.5), 0 8px 24px -8px rgba(139,92,246,0.45)',
         glowBrick: '0 0 0 1px rgba(248,113,113,0.55), 0 8px 24px -8px rgba(248,113,113,0.45)'
       }
