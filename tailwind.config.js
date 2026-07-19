@@ -4,39 +4,46 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Dark navy + green theme. Token names (paper/ink/emerald/
-        // brick/rule) are kept as-is so every component that already
-        // references them just picks up the new palette automatically.
+        // Every token resolves through a CSS variable (see src/index.css)
+        // so the app can switch between dark and light mode by flipping
+        // the [data-theme] attribute on <html> — no component changes
+        // needed. Values are stored as "R G B" triplets so Tailwind's
+        // opacity modifiers (e.g. bg-emerald/10) keep working via the
+        // <alpha-value> placeholder. Token names (paper/ink/emerald/
+        // brick/violet/amber/rule) are kept as-is so every component that
+        // already references them just picks up each theme automatically.
+        // brick/violet/amber are intentionally monochrome (green/white/
+        // gray only, no red/purple/gold) per the app's current palette.
         paper: {
-          DEFAULT: '#0F172A',
-          dim: '#0B1220',
-          card: '#1E293B'
+          DEFAULT: 'rgb(var(--color-paper) / <alpha-value>)',
+          dim: 'rgb(var(--color-paper-dim) / <alpha-value>)',
+          card: 'rgb(var(--color-paper-card) / <alpha-value>)'
         },
         ink: {
-          DEFAULT: '#E2E8F0',
-          soft: '#94A3B8',
-          faint: '#64748B'
+          DEFAULT: 'rgb(var(--color-ink) / <alpha-value>)',
+          soft: 'rgb(var(--color-ink-soft) / <alpha-value>)',
+          faint: 'rgb(var(--color-ink-faint) / <alpha-value>)'
         },
         emerald: {
-          DEFAULT: '#10B981',
-          dark: '#047857',
-          light: '#123D2E'
+          DEFAULT: 'rgb(var(--color-emerald) / <alpha-value>)',
+          dark: 'rgb(var(--color-emerald-dark) / <alpha-value>)',
+          light: 'rgb(var(--color-emerald-light) / <alpha-value>)'
         },
         brick: {
-          DEFAULT: '#F87171',
-          light: '#3F1D1D'
+          DEFAULT: 'rgb(var(--color-brick) / <alpha-value>)',
+          light: 'rgb(var(--color-brick-light) / <alpha-value>)'
         },
         violet: {
-          DEFAULT: '#8B5CF6',
-          dark: '#7C3AED',
-          light: '#2E1F5E'
+          DEFAULT: 'rgb(var(--color-violet) / <alpha-value>)',
+          dark: 'rgb(var(--color-violet-dark) / <alpha-value>)',
+          light: 'rgb(var(--color-violet-light) / <alpha-value>)'
         },
         amber: {
-          DEFAULT: '#F59E0B',
-          dark: '#D97706',
-          light: '#4A3111'
+          DEFAULT: 'rgb(var(--color-amber) / <alpha-value>)',
+          dark: 'rgb(var(--color-amber-dark) / <alpha-value>)',
+          light: 'rgb(var(--color-amber-light) / <alpha-value>)'
         },
-        rule: '#27364A'
+        rule: 'rgb(var(--color-rule) / <alpha-value>)'
       },
       fontFamily: {
         sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
@@ -44,12 +51,12 @@ export default {
       },
       backgroundImage: {
         perforation:
-          'repeating-linear-gradient(to right, transparent 0 6px, #27364A 6px 8px)'
+          'repeating-linear-gradient(to right, transparent 0 6px, rgb(var(--color-rule)) 6px 8px)'
       },
       boxShadow: {
-        glow: '0 0 0 1px rgba(16,185,129,0.4), 0 8px 24px -8px rgba(16,185,129,0.35)',
-        glowViolet: '0 0 0 1px rgba(139,92,246,0.5), 0 8px 24px -8px rgba(139,92,246,0.45)',
-        glowBrick: '0 0 0 1px rgba(248,113,113,0.55), 0 8px 24px -8px rgba(248,113,113,0.45)'
+        glow: '0 0 0 1px rgb(var(--color-emerald) / 0.4), 0 8px 24px -8px rgb(var(--color-emerald) / 0.35)',
+        glowViolet: '0 0 0 1px rgb(var(--color-violet) / 0.5), 0 8px 24px -8px rgb(var(--color-violet) / 0.45)',
+        glowBrick: '0 0 0 1px rgb(var(--color-brick) / 0.55), 0 8px 24px -8px rgb(var(--color-brick) / 0.45)'
       }
     }
   },
