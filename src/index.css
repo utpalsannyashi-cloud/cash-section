@@ -15,7 +15,7 @@
   --color-paper-card: 30 41 59;
   --color-ink: 226 232 240;
   --color-ink-soft: 148 163 184;
-  --color-ink-faint: 100 116 139;
+  --color-ink-faint: 130 145 168;
   --color-emerald: 16 185 129;
   --color-emerald-dark: 4 120 87;
   --color-emerald-light: 18 61 46;
@@ -44,7 +44,7 @@
   --color-paper-card: 255 255 255;
   --color-ink: 15 23 42;
   --color-ink-soft: 71 85 105;
-  --color-ink-faint: 148 163 184;
+  --color-ink-faint: 122 138 158;
   --color-emerald: 4 120 87;
   --color-emerald-dark: 6 95 70;
   --color-emerald-light: 209 250 229;
@@ -132,7 +132,7 @@
   .receipt-card {
     background: theme('colors.paper.card');
     border: 1px solid theme('colors.rule');
-    border-radius: 4px;
+    border-radius: theme('borderRadius.DEFAULT');
     position: relative;
   }
   .receipt-tear {
@@ -143,20 +143,31 @@
     background-repeat: repeat-x;
   }
 
+  /* Every control shares one radius, one weight and one focus treatment,
+     so a row of mixed buttons and inputs lines up on a single baseline.
+     Sized with padding rather than a fixed height so the smaller variants
+     used inside list rows can still override it. */
   .btn-primary {
-    @apply bg-emerald text-paper font-medium rounded px-4 py-2.5 text-sm transition-colors hover:bg-emerald-dark disabled:opacity-50 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 bg-emerald text-paper font-medium rounded px-4 py-2.5 text-sm transition-colors hover:bg-emerald-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald/50 focus-visible:ring-offset-2 focus-visible:ring-offset-paper disabled:opacity-45 disabled:pointer-events-none;
   }
   .btn-secondary {
-    @apply bg-transparent border border-ink/20 text-ink font-medium rounded px-4 py-2.5 text-sm transition-colors hover:bg-ink/5 disabled:opacity-50 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 bg-transparent border border-rule text-ink font-medium rounded px-4 py-2.5 text-sm transition-colors hover:bg-ink/5 hover:border-ink/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald/50 focus-visible:ring-offset-2 focus-visible:ring-offset-paper disabled:opacity-45 disabled:pointer-events-none;
+  }
+  /* Third tier, for actions that sit inside a card and shouldn't draw a
+     border of their own. */
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 bg-transparent text-ink-soft font-medium rounded px-3 py-2 text-sm transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald/50 disabled:opacity-45 disabled:pointer-events-none;
   }
   .btn-danger {
-    @apply bg-brick text-paper font-medium rounded px-4 py-2.5 text-sm transition-colors hover:bg-brick/90 disabled:opacity-50 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 bg-brick text-paper font-medium rounded px-4 py-2.5 text-sm transition-colors hover:bg-brick/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brick/50 focus-visible:ring-offset-2 focus-visible:ring-offset-paper disabled:opacity-45 disabled:pointer-events-none;
   }
+  /* Focus adds a ring rather than only recolouring the border, so the
+     state is unmissable in both themes and costs no layout shift. */
   .input-field {
-    @apply w-full bg-paper-card border border-ink/15 rounded px-3 py-2.5 text-sm text-ink placeholder:text-ink-faint focus:border-emerald outline-none transition-colors;
+    @apply w-full bg-paper-card border border-rule rounded px-3 py-2.5 text-sm text-ink placeholder:text-ink-faint transition-colors focus:border-emerald focus:outline-none focus:ring-2 focus:ring-emerald/25;
   }
   .label-eyebrow {
-    @apply font-mono text-[11px] uppercase tracking-widest text-ink-faint;
+    @apply font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-ink-faint;
   }
 
   /* ---------------------------------------------------------
@@ -165,10 +176,12 @@
    * Groups / GroupDashboard / SessionDetail / MasterAdmin views.
    * --------------------------------------------------------- */
   .stat-card {
-    @apply bg-paper-card border border-rule rounded-lg px-4 py-3.5 transition-colors;
+    @apply bg-paper-card border border-rule rounded px-4 py-3 transition-colors;
   }
+  /* A quiet ring rather than the coloured glow, which competed with the
+     left-edge accent for attention. */
   .stat-card-active {
-    @apply border-emerald shadow-glow;
+    @apply border-emerald/60 ring-1 ring-emerald/25;
   }
   /* Colored left-edge accents for clickable stat cards (e.g. the four
      summary buttons on the Groups page). border-l-4 overrides only the
@@ -192,7 +205,7 @@
     @apply border-l-4 border-l-accent-sky;
   }
   .stat-card-value {
-    @apply font-mono text-2xl font-semibold text-ink leading-tight;
+    @apply font-mono text-[22px] font-semibold text-ink leading-tight tabular-nums;
   }
   .stat-card-label {
     @apply text-xs font-medium text-ink-soft;
@@ -202,7 +215,7 @@
   }
 
   .chip {
-    @apply text-xs px-3 py-1.5 rounded-full border border-rule text-ink-soft transition-colors whitespace-nowrap hover:border-ink/30;
+    @apply text-xs px-3 py-1.5 rounded-full border border-rule text-ink-soft transition-colors whitespace-nowrap hover:border-ink/30 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald/40;
   }
   .chip-active {
     @apply bg-emerald/10 border-emerald text-emerald;
@@ -223,15 +236,15 @@
   }
 
   .status-pill {
-    @apply text-[11px] font-mono uppercase tracking-wide px-2 py-1 rounded shrink-0;
+    @apply inline-flex items-center text-[10px] font-mono font-medium uppercase tracking-[0.08em] px-2 py-0.5 rounded-sm shrink-0;
   }
 
   .list-row {
-    @apply receipt-card p-4 flex items-center gap-3 hover:border-emerald transition-colors;
+    @apply receipt-card p-4 flex items-center gap-3 transition-colors hover:bg-ink/[0.03] hover:border-ink/20;
   }
 
   .fab {
-    @apply fixed right-5 z-20 w-14 h-14 rounded-full bg-emerald text-paper flex items-center justify-center text-2xl shadow-glow hover:bg-emerald-dark transition-colors;
+    @apply fixed right-5 z-20 w-12 h-12 rounded-full bg-emerald text-paper flex items-center justify-center shadow-lift hover:bg-emerald-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald/50 focus-visible:ring-offset-2 focus-visible:ring-offset-paper transition-colors;
     /* Clear the home-indicator / gesture bar on notched phones instead of
        sitting flush against it, which made the button feel tucked away
        and hard to reach on mobile. */
