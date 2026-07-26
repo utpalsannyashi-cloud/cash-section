@@ -7,7 +7,7 @@ import { SettlementSummary } from '@/components/SettlementSummary';
 import { JoinRequestsPanel } from '@/components/JoinRequestsPanel';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import { deriveTotals, simplifyDebts } from '@/utils/settlement';
+import { deriveTotals, findDepartedCredits, simplifyDebts } from '@/utils/settlement';
 import { formatCurrency } from '@/utils/currency';
 import type { ContributionSource, Expense, Group, GroupMember, Settlement } from '@/types';
 
@@ -39,6 +39,14 @@ export function GroupDashboard() {
   const [currency, setCurrency] = useState('INR');
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [settlements, setSettlements] = useState<Settlement[]>([]);
+  // Loaded up front rather than only at settle-up time, so the group can
+  // be told about money owed to a removed member before anyone presses
+  // Split up.
+  const [splits, setSplits] = useState<{ user_id: string; share: number }[]>([]);
+  // Admin's call on what to do with that money. 'repay' keeps the
+  // departed member in the settlement as a creditor; 'absorb' spreads
+  // their credit across everyone still here instead.
+  const [departedCreditMode, setDepartedCreditMode] = useState<'repay' | 'absorb'>('repay');
   const [loading, setLoading] = useState(true);
 
   const [view, setView] = useState<'expenses' | 'settle'>('expenses');
@@ -138,9 +146,21 @@ export function GroupDashboard() {
       ]);
       setExpenses((exp as unknown as Expense[]) ?? []);
       setSettlements((settl as unknown as Settlement[]) ?? []);
+
+      // Needed to work out whether anyone who's been removed is still
+      // owed money. Cheap enough to load with everything else.
+      const { data: spl } = await supabase
+        .from('expense_splits')
+        .select('user_id, share, expenses!inner(session_id)')
+        .in('expenses.session_id', ids);
+      setSplits(((spl as unknown as { user_id: string; share: number }[]) ?? []).map((r) => ({
+        user_id: r.user_id,
+        share: Number(r.share)
+      })));
     } else {
       setExpenses([]);
       setSettlements([]);
+      setSplits([]);
     }
 
     setLoading(false);
@@ -185,6 +205,20 @@ export function GroupDashboard() {
     .sort((a, b) => b.total - a.total);
   const recentExpenses = expenses.slice(0, 5);
 
+  // Someone an admin removed who had paid out more than they consumed.
+  // The group still owes them, and until this was handled the money
+  // quietly disappeared from the settlement.
+  const departedCredits = findDepartedCredits(
+    activeMembers.map((m) => m.user_id),
+    expenses.map((e) => ({ paid_by: e.paid_by, amount: Number(e.amount) })),
+    splits
+  );
+  const departedTotal = departedCredits.reduce((sum, d) => sum + d.amount, 0);
+  // They're gone from group_members, so their name has to come from an
+  // expense they paid for.
+  const departedName = (userId: string) =>
+    expenses.find((e) => e.paid_by === userId)?.payer?.username ?? 'a former member';
+
   // Looks up the description of the expense a member's contribution is
   // pinned to (contribution_start_source === 'expense'), so the Members
   // panel can show something more specific than just a date. Falls back to
@@ -219,7 +253,9 @@ export function GroupDashboard() {
       .in('expenses.session_id', sessionIds);
 
     const participantIds = activeMembers.map((m) => m.user_id);
-    const totals = deriveTotals(participantIds, allExpenses ?? [], (allSplits as any) ?? []);
+    const totals = deriveTotals(participantIds, allExpenses ?? [], (allSplits as any) ?? [], {
+      departedCredits: departedCreditMode
+    });
     const transfers = simplifyDebts(totals);
 
     // Replace any existing (unpaid) computed settlement rows with the fresh calculation.
@@ -855,6 +891,51 @@ export function GroupDashboard() {
         </>
       ) : (
         <div className="space-y-4">
+          {departedCredits.length > 0 ? (
+            <div className="receipt-card p-4 border-l-4 border-l-accent-amber">
+              <p className="label-eyebrow mb-2">Owed to someone who left</p>
+              <ul className="space-y-1 mb-3">
+                {departedCredits.map((d) => (
+                  <li key={d.userId} className="flex items-center justify-between gap-2">
+                    <span className="text-sm text-ink-soft truncate">@{departedName(d.userId)}</span>
+                    <span className="font-mono text-sm shrink-0">{formatCurrency(d.amount, currency)}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-[11px] text-ink-faint">
+                {departedCredits.length === 1 ? 'They paid' : 'They paid'} more than they used before being
+                removed from the group.
+                {isAdmin
+                  ? ' Choose whether to pay them back or share it out among everyone still here.'
+                  : ' The settlement below pays them back.'}
+              </p>
+              {isAdmin ? (
+                <div className="flex gap-2 mt-3">
+                  <button
+                    type="button"
+                    onClick={() => setDepartedCreditMode('repay')}
+                    className={`chip ${departedCreditMode === 'repay' ? 'chip-active' : ''}`}
+                  >
+                    Pay them back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDepartedCreditMode('absorb')}
+                    className={`chip ${departedCreditMode === 'absorb' ? 'chip-active' : ''}`}
+                  >
+                    Split it between us
+                  </button>
+                </div>
+              ) : null}
+              {isAdmin && departedCreditMode === 'absorb' ? (
+                <p className="text-[11px] text-ink-faint mt-2">
+                  {formatCurrency(departedTotal, currency)} will come off what the current members owe, and
+                  nobody will pay them. Re-split to apply it.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
           <button onClick={handleComputeSettlement} disabled={computing} className="btn-primary w-full">
             {computing ? 'Splitting…' : settlements.length > 0 ? 'Re-split' : 'Split up'}
           </button>
