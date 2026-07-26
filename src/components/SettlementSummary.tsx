@@ -1,4 +1,5 @@
 import { formatCurrency } from '@/utils/currency';
+import { Icon } from '@/components/Icon';
 import type { Settlement } from '@/types';
 
 export function SettlementSummary({
@@ -15,15 +16,31 @@ export function SettlementSummary({
   if (settlements.length === 0) {
     return (
       <div className="receipt-card p-6 text-center">
-        <p className="text-sm text-ink-soft">Everyone's even. Nothing to settle.</p>
+        <p className="text-sm font-medium text-emerald-dark flex items-center justify-center gap-1.5">
+          <Icon name="check" size={16} className="text-emerald-dark" />
+          All settled up
+        </p>
+        <p className="text-xs text-ink-soft mt-1">Everyone's even. Nothing to settle.</p>
       </div>
     );
   }
 
+  // Distinct from the empty-list case above: transfers were computed at
+  // some point, and every single one of them has since been marked paid.
+  // Worth calling out on its own — otherwise this looks identical to a
+  // settlement that's still half paid off, just with more strikethrough.
+  const allPaid = settlements.every((s) => s.is_paid);
+
   return (
     <div className="receipt-card overflow-hidden">
-      <div className="p-4 border-b border-dashed border-rule">
+      <div className="p-4 border-b border-dashed border-rule flex items-center justify-between gap-2">
         <p className="label-eyebrow">Settle up</p>
+        {allPaid ? (
+          <span className="status-pill bg-emerald-light text-emerald-dark flex items-center gap-1 shrink-0">
+            <Icon name="check" size={12} />
+            All settled up
+          </span>
+        ) : null}
       </div>
       <ul>
         {settlements.map((s) => (
