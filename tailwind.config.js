@@ -60,6 +60,15 @@ export default {
         sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
         mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace']
       },
+      // One radius scale, so cards, buttons, inputs and pills stop
+      // disagreeing (the app previously mixed 4px, rounded-lg and 2xl).
+      borderRadius: {
+        sm: '4px',
+        DEFAULT: '6px',
+        md: '6px',
+        lg: '10px',
+        xl: '14px'
+      },
       backgroundImage: {
         perforation:
           'repeating-linear-gradient(to right, transparent 0 6px, rgb(var(--color-rule)) 6px 8px)'
@@ -67,7 +76,12 @@ export default {
       boxShadow: {
         glow: '0 0 0 1px rgb(var(--color-emerald) / 0.4), 0 8px 24px -8px rgb(var(--color-emerald) / 0.35)',
         glowViolet: '0 0 0 1px rgb(var(--color-violet) / 0.5), 0 8px 24px -8px rgb(var(--color-violet) / 0.45)',
-        glowBrick: '0 0 0 1px rgb(var(--color-brick) / 0.55), 0 8px 24px -8px rgb(var(--color-brick) / 0.45)'
+        glowBrick: '0 0 0 1px rgb(var(--color-brick) / 0.55), 0 8px 24px -8px rgb(var(--color-brick) / 0.45)',
+        // Neutral elevation for things that genuinely float (the FAB,
+        // sheets). Preferred over the coloured glows above, which read as
+        // decoration rather than depth.
+        card: '0 1px 2px rgb(0 0 0 / 0.04)',
+        lift: '0 1px 2px rgb(0 0 0 / 0.08), 0 10px 24px -14px rgb(0 0 0 / 0.45)'
       }
     }
   },
