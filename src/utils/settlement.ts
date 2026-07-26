@@ -65,8 +65,8 @@ export function simplifyDebts(totals: PersonTotals[]): Transfer[] {
   // Use max-heaps via sort-on-each-iteration (group sizes are small,
   // so O(n^2 log n) is more than fast enough and keeps this readable).
   while (creditors.length > 0 && debtors.length > 0) {
-    creditors.sort((a, b) => b.amount - a.amount);
-    debtors.sort((a, b) => b.amount - a.amount);
+    creditors.sort((a, b) => b.amount - a.amount || a.userId.localeCompare(b.userId));
+    debtors.sort((a, b) => b.amount - a.amount || a.userId.localeCompare(b.userId));
 
     const topCreditor = creditors[0];
     const topDebtor = debtors[0];
@@ -92,66 +92,153 @@ export function simplifyDebts(totals: PersonTotals[]): Transfer[] {
 }
 
 /**
- * Convenience helper: derive PersonTotals from raw expense + split rows,
- * as they'd come back from Supabase.
+ * Splits `cents` as evenly as possible across `ids`, handing the leftover
+ * cent(s) to the first few so the parts always sum back to the whole.
+ */
+function shareOut(cents: number, ids: string[]): Map<string, number> {
+  const out = new Map<string, number>();
+  if (ids.length === 0) return out;
+  const base = Math.floor(cents / ids.length);
+  let remainder = cents - base * ids.length;
+  for (const id of ids) {
+    let c = base;
+    if (remainder > 0) {
+      c += 1;
+      remainder -= 1;
+    }
+    out.set(id, c);
+  }
+  return out;
+}
+
+export interface DepartedBalance {
+  userId: string;
+  /** Rupees, 2dp. Always positive: what the group still owes them. */
+  amount: number;
+}
+
+/**
+ * Tallies everything in integer cents, converting back to rupees only at
+ * the boundary. The previous version rounded through rupees midway, which
+ * undermined the whole point of working in cents.
+ */
+function tallyCents(
+  participantIds: string[],
+  expenses: { paid_by: string; amount: number }[],
+  splits: { user_id: string; share: number }[]
+) {
+  const paid = new Map<string, number>();
+  const owed = new Map<string, number>();
+  const bump = (m: Map<string, number>, k: string, v: number) => m.set(k, (m.get(k) ?? 0) + v);
+
+  for (const id of participantIds) {
+    paid.set(id, 0);
+    owed.set(id, 0);
+  }
+  for (const e of expenses) bump(paid, e.paid_by, toCents(e.amount));
+  for (const s of splits) bump(owed, s.user_id, toCents(s.share));
+
+  const participantSet = new Set(participantIds);
+  const orphanCredits = new Map<string, number>();
+  let orphanDeficitCents = 0;
+
+  for (const userId of new Set([...paid.keys(), ...owed.keys()])) {
+    if (participantSet.has(userId)) continue;
+    const net = (paid.get(userId) ?? 0) - (owed.get(userId) ?? 0);
+    if (net > 0) orphanCredits.set(userId, net);
+    else if (net < 0) orphanDeficitCents += -net;
+  }
+
+  return { paid, owed, orphanCredits, orphanDeficitCents };
+}
+
+/**
+ * People who appear in the expense or split rows but are no longer in
+ * `participantIds` — an admin removed them after the fact — and who are
+ * net creditors: they paid out more than they consumed.
  *
- * Expense/split rows can reference someone who is no longer a group
- * member (an admin removed them after expenses were already logged —
- * see handleRemoveMember in GroupDashboard.tsx, which deliberately
- * leaves past expense_splits untouched). Rather than silently dropping
- * what a departed member still owed — which would understate what the
- * payer is actually owed back — their net deficit (owed minus whatever
- * they themselves paid) is folded evenly across the current
- * participantIds, the same way a fresh expense would be split.
+ * Exposed separately so the group dashboard can tell the admin who's owed
+ * what, and let them choose how to handle it, before any settlement runs.
+ */
+export function findDepartedCredits(
+  participantIds: string[],
+  expenses: { paid_by: string; amount: number }[],
+  splits: { user_id: string; share: number }[]
+): DepartedBalance[] {
+  const { orphanCredits } = tallyCents(participantIds, expenses, splits);
+  return [...orphanCredits.entries()]
+    .map(([userId, cents]) => ({ userId, amount: toRupees(cents) }))
+    .sort((a, b) => b.amount - a.amount || a.userId.localeCompare(b.userId));
+}
+
+export interface DeriveOptions {
+  /**
+   * What to do about money the group owes a removed member.
+   *
+   * 'repay' (the default) keeps them in the settlement as a creditor, so
+   * the transfers actually pay them back. Their profile row still exists,
+   * so a transfer can name them even though they've left the group.
+   *
+   * 'absorb' spreads their credit across the current participants
+   * instead, reducing what each of them owes. Nobody pays the departed
+   * member. Only ever chosen deliberately by an admin.
+   */
+  departedCredits?: 'repay' | 'absorb';
+}
+
+/**
+ * Derive PersonTotals from raw expense + split rows, as they'd come back
+ * from Supabase.
+ *
+ * Expense and split rows can reference someone who is no longer a group
+ * member, because removing a member deliberately leaves their history
+ * intact (see handleRemoveMember in GroupDashboard.tsx). Both directions
+ * have to be handled or the balances stop summing to zero:
+ *
+ *   - They consumed more than they paid. That shortfall can't be
+ *     collected from someone who has left, so it's spread across whoever
+ *     is still here, the same way a fresh expense would be.
+ *
+ *   - They paid more than they consumed. The group owes them. This case
+ *     used to be skipped entirely, so the money simply vanished: debtors
+ *     outnumbered creditors and simplifyDebts dropped the difference on
+ *     the floor. They're now repaid by default.
  */
 export function deriveTotals(
   participantIds: string[],
   expenses: { paid_by: string; amount: number }[],
-  splits: { user_id: string; share: number; expense_id: string }[]
+  splits: { user_id: string; share: number; expense_id?: string }[],
+  options: DeriveOptions = {}
 ): PersonTotals[] {
-  const paidMap = new Map<string, number>();
-  const owedMap = new Map<string, number>();
+  const mode = options.departedCredits ?? 'repay';
+  const { paid, owed, orphanCredits, orphanDeficitCents } = tallyCents(participantIds, expenses, splits);
 
-  for (const id of participantIds) {
-    paidMap.set(id, 0);
-    owedMap.set(id, 0);
-  }
-
-  for (const e of expenses) {
-    paidMap.set(e.paid_by, (paidMap.get(e.paid_by) ?? 0) + e.amount);
-  }
-
-  for (const s of splits) {
-    owedMap.set(s.user_id, (owedMap.get(s.user_id) ?? 0) + s.share);
-  }
-
-  const participantSet = new Set(participantIds);
-  const allUserIds = new Set([...paidMap.keys(), ...owedMap.keys()]);
-
-  let orphanedDeficitCents = 0;
-  for (const userId of allUserIds) {
-    if (participantSet.has(userId)) continue;
-    const paid = paidMap.get(userId) ?? 0;
-    const owed = owedMap.get(userId) ?? 0;
-    if (owed > paid) orphanedDeficitCents += toCents(owed) - toCents(paid);
-  }
-
-  if (orphanedDeficitCents > 0 && participantIds.length > 0) {
-    const base = Math.floor(orphanedDeficitCents / participantIds.length);
-    let remainder = orphanedDeficitCents - base * participantIds.length;
-    for (const id of participantIds) {
-      let cents = base;
-      if (remainder > 0) {
-        cents += 1;
-        remainder -= 1;
-      }
-      owedMap.set(id, (owedMap.get(id) ?? 0) + toRupees(cents));
+  if (orphanDeficitCents > 0) {
+    for (const [id, cents] of shareOut(orphanDeficitCents, participantIds)) {
+      owed.set(id, (owed.get(id) ?? 0) + cents);
     }
   }
 
-  return participantIds.map((userId) => ({
+  const totals: PersonTotals[] = participantIds.map((userId) => ({
     userId,
-    paid: paidMap.get(userId) ?? 0,
-    owed: owedMap.get(userId) ?? 0
+    paid: toRupees(paid.get(userId) ?? 0),
+    owed: toRupees(owed.get(userId) ?? 0)
   }));
+
+  if (orphanCredits.size === 0) return totals;
+
+  if (mode === 'absorb') {
+    let totalCredit = 0;
+    for (const c of orphanCredits.values()) totalCredit += c;
+    for (const [id, cents] of shareOut(totalCredit, participantIds)) {
+      const t = totals.find((x) => x.userId === id);
+      if (t) t.owed = toRupees(toCents(t.owed) - cents);
+    }
+    return totals;
+  }
+
+  for (const [userId, cents] of orphanCredits) {
+    totals.push({ userId, paid: toRupees(cents), owed: 0 });
+  }
+  return totals;
 }
