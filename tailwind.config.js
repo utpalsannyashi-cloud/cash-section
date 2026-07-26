@@ -43,7 +43,18 @@ export default {
           dark: 'rgb(var(--color-amber-dark) / <alpha-value>)',
           light: 'rgb(var(--color-amber-light) / <alpha-value>)'
         },
-        rule: 'rgb(var(--color-rule) / <alpha-value>)'
+        rule: 'rgb(var(--color-rule) / <alpha-value>)',
+        // Stat-card accents only — four distinct hues, themed via CSS
+        // variables like every other token (see src/index.css). These are
+        // the one deliberate exception to the monochrome note above: the
+        // four summary tiles are only tellable apart at a glance if their
+        // left borders are genuinely different colours.
+        accent: {
+          green: 'rgb(var(--color-accent-green) / <alpha-value>)',
+          violet: 'rgb(var(--color-accent-violet) / <alpha-value>)',
+          amber: 'rgb(var(--color-accent-amber) / <alpha-value>)',
+          sky: 'rgb(var(--color-accent-sky) / <alpha-value>)'
+        }
       },
       fontFamily: {
         sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
