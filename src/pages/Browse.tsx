@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { Icon } from '@/components/Icon';
 
 // The DB assigns every fresh anonymous user this exact shape as a
 // placeholder username (see 0001_schema.sql) — matching it is how we tell
@@ -153,7 +154,7 @@ export function Browse() {
               className="w-14 h-14 rounded-full bg-emerald-light border border-emerald/40 flex items-center justify-center mx-auto mb-4 text-2xl"
               aria-hidden
             >
-              ⏳
+              <Icon name="clock" size={26} />
             </div>
             <h1 className="font-mono text-xl font-semibold text-ink">Waiting for approval</h1>
             <p className="text-ink-soft text-sm mt-2">
@@ -181,7 +182,7 @@ export function Browse() {
               className="w-14 h-14 rounded-full bg-brick-light border border-brick/40 flex items-center justify-center mx-auto mb-4 text-2xl"
               aria-hidden
             >
-              🚫
+              <Icon name="ban" size={26} />
             </div>
             <h1 className="font-mono text-xl font-semibold text-ink">Not approved</h1>
             <p className="text-ink-soft text-sm mt-2">
@@ -205,7 +206,7 @@ export function Browse() {
             className="w-14 h-14 rounded-full bg-emerald-light border border-emerald/40 flex items-center justify-center mx-auto mb-4 text-2xl"
             aria-hidden
           >
-            🔒
+            <Icon name="lock" size={26} />
           </div>
           <h1 className="font-mono text-xl font-semibold text-ink">
             Cash<span className="text-emerald">§</span>ection
