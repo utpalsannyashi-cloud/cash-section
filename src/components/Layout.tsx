@@ -2,6 +2,7 @@ import { ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
+import { Icon } from '@/components/Icon';
 
 export function Layout({ children, back }: { children: ReactNode; back?: string }) {
   const { profile, signOut, isGuest, isMasterAdmin } = useAuth();
@@ -21,7 +22,7 @@ export function Layout({ children, back }: { children: ReactNode; back?: string 
                 aria-label="Back"
                 className="text-ink-soft hover:text-ink transition-colors"
               >
-                ←
+                <Icon name="arrowLeft" size={18} />
               </button>
             ) : null}
             <Link to="/" className="font-mono font-semibold tracking-tight text-ink">
@@ -35,7 +36,7 @@ export function Layout({ children, back }: { children: ReactNode; back?: string 
             title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
             className="w-8 h-8 flex items-center justify-center rounded-md border border-rule text-ink-faint hover:text-ink hover:border-ink/30 transition-colors shrink-0"
           >
-            {theme === 'dark' ? '☀️' : '🌙'}
+            {theme === 'dark' ? <Icon name="sun" size={16} /> : <Icon name="moon" size={16} />}
           </button>
           {profile && !isGuest ? (
             <div className="flex items-center gap-2 sm:gap-3">
