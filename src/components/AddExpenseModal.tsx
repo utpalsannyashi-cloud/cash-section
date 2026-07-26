@@ -18,6 +18,26 @@ export interface EditingSplit {
 // single tap for the currencies this app's groups actually use.
 const CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'AUD', 'CAD', 'SGD', 'AED', 'JPY'];
 
+/**
+ * Local-timezone YYYY-MM-DD for a <input type="date">.
+ *
+ * Deliberately not toISOString().slice(0, 10), which gives the UTC date
+ * and so offers "yesterday" as the default to anyone east of UTC in the
+ * early hours.
+ */
+function toDateInput(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Midday local time on the chosen day. Anchoring away from midnight means
+ * the stored timestamp can't render as the neighbouring day for someone
+ * reading it in another timezone.
+ */
+function dateInputToTimestamp(dateStr: string): string {
+  return new Date(`${dateStr}T12:00:00`).toISOString();
+}
+
 interface Props {
   groupId: string;
   sessionId: string;
@@ -85,6 +105,13 @@ export function AddExpenseModal({
   const [selectedCurrency, setSelectedCurrency] = useState(currency || 'INR');
   const [attachmentPath, setAttachmentPath] = useState<string | null>(editingExpense?.attachment_path ?? null);
   const [paidBy, setPaidBy] = useState(() => editingExpense?.paid_by ?? currentUserId);
+  // The expense date. Stored in expenses.created_at (see migration
+  // 0017), which is what ExpenseCard shows and the dashboard sorts by.
+  // Defaults to today; future dates are allowed so a prepaid booking can
+  // be logged against the day it's actually for.
+  const [spentOn, setSpentOn] = useState(() =>
+    toDateInput(editingExpense ? new Date(editingExpense.created_at) : new Date())
+  );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -140,7 +167,13 @@ export function AddExpenseModal({
         p_paid_by: paidBy,
         p_split_type: 'equal',
         p_attachment_path: attachmentPath,
-        p_splits: Object.entries(shares).map(([userId, share]) => ({ user_id: userId, share }))
+        p_splits: Object.entries(shares).map(([userId, share]) => ({ user_id: userId, share })),
+        // Left exactly as it was when the date wasn't touched, so editing
+        // an amount doesn't quietly move the expense to midday.
+        p_created_at:
+          spentOn === toDateInput(new Date(editingExpense.created_at))
+            ? editingExpense.created_at
+            : dateInputToTimestamp(spentOn)
       });
 
       setBusy(false);
@@ -162,7 +195,13 @@ export function AddExpenseModal({
         category: 'Misc',
         split_type: 'equal',
         attachment_path: attachmentPath,
-        created_by: currentUserId
+        created_by: currentUserId,
+        // Only send a date when it isn't today: a same-day expense keeps
+        // the real insert time and so stays correctly ordered against the
+        // others added at the table.
+        ...(spentOn === toDateInput(new Date())
+          ? {}
+          : { created_at: dateInputToTimestamp(spentOn) })
       })
       .select()
       .single();
@@ -239,6 +278,20 @@ export function AddExpenseModal({
                 placeholder="0.00"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="label-eyebrow block mb-1.5">Date</label>
+            <input
+              required
+              type="date"
+              value={spentOn}
+              onChange={(e) => setSpentOn(e.target.value)}
+              className="input-field font-mono"
+            />
+            <p className="text-xs text-ink-faint mt-1">
+              Defaults to today. Change it if you're entering something from another day.
+            </p>
           </div>
 
           {isAdmin ? (
