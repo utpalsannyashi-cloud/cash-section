@@ -2,10 +2,11 @@ import { FormEvent, MouseEvent, useEffect, useMemo, useRef, useState } from 'rea
 import { Link, useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { Icon } from '@/components/Icon';
+import { AdminPartnersPanel } from '@/components/AdminPartnersPanel';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency } from '@/utils/currency';
-import type { Group } from '@/types';
+import type { AdminPartner, Group, PartnerRequest } from '@/types';
 
 type GroupWithRole = Group & { role: 'admin' | 'member'; member_count: number; settled: boolean };
 type Filter = 'all' | 'admin' | 'member';
@@ -45,6 +46,22 @@ export function Groups() {
   const [actionBusy, setActionBusy] = useState(false);
   const longPressTimer = useRef<number | null>(null);
   const longPressTriggered = useRef(false);
+
+  // Admin partners: a standing pairing with another account, so groups
+  // created going forward can optionally make both of you admins from
+  // the start — see AdminPartnersPanel and migration 0018. Kept here
+  // rather than inside the panel because the create-group form below
+  // also needs the partner list, for its "create as" picker.
+  const [showPartners, setShowPartners] = useState(false);
+  const [partners, setPartners] = useState<AdminPartner[]>([]);
+  const [partnerRequests, setPartnerRequests] = useState<PartnerRequest[]>([]);
+  const [partnerBusyId, setPartnerBusyId] = useState<string | null>(null);
+  const [partnerError, setPartnerError] = useState<string | null>(null);
+  const [inviteUsername, setInviteUsername] = useState('');
+  const [inviteBusy, setInviteBusy] = useState(false);
+  // Which partner (if any) to make a co-admin of the group being
+  // created. null = solo, same as every group made before this feature.
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
 
   // AI insights FAB, mirroring the one inside a single group's dashboard.
   // Here there's no single group in scope, so a lone group jumps straight
@@ -163,8 +180,25 @@ export function Groups() {
     setLoading(false);
   };
 
+  // Accepted partnerships (for the create-group picker) and pending
+  // requests in both directions (for the panel). One round trip each,
+  // via RPCs — see migration 0018 for why a plain select can't be used
+  // here (the other person in a pending invite may not share a group
+  // with you yet, so profiles RLS would hide their username).
+  const loadPartners = async () => {
+    const [{ data: p, error: pErr }, { data: r, error: rErr }] = await Promise.all([
+      supabase.rpc('list_admin_partners'),
+      supabase.rpc('list_partner_requests')
+    ]);
+    if (!pErr) setPartners((p as AdminPartner[]) ?? []);
+    if (!rErr) setPartnerRequests((r as PartnerRequest[]) ?? []);
+  };
+
   useEffect(() => {
-    if (user) loadGroups();
+    if (user) {
+      loadGroups();
+      loadPartners();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
@@ -195,7 +229,8 @@ export function Groups() {
     setBusy(true);
     const { error: rpcError } = await supabase.rpc('create_group', {
       p_name: newGroupName,
-      p_access_code: code || null
+      p_access_code: code || null,
+      p_partner_id: selectedPartnerId || null
     });
     setBusy(false);
     if (rpcError) {
@@ -210,6 +245,7 @@ export function Groups() {
     }
     setNewGroupName('');
     setCustomCode('');
+    setSelectedPartnerId(null);
     setShowCreate(false);
     loadGroups();
   };
@@ -360,6 +396,63 @@ export function Groups() {
     loadGroups();
   };
 
+  const handleInvitePartner = async (e: FormEvent) => {
+    e.preventDefault();
+    const username = inviteUsername.trim();
+    if (!username) return;
+    setInviteBusy(true);
+    setPartnerError(null);
+    const { error: rpcError } = await supabase.rpc('invite_admin_partner', { p_username: username });
+    setInviteBusy(false);
+    if (rpcError) {
+      setPartnerError(rpcError.message);
+      return;
+    }
+    setInviteUsername('');
+    loadPartners();
+  };
+
+  const handleDecidePartnerRequest = async (id: string, approve: boolean) => {
+    setPartnerBusyId(id);
+    setPartnerError(null);
+    const { error: rpcError } = await supabase.rpc('decide_admin_partner_request', {
+      p_request_id: id,
+      p_approve: approve
+    });
+    setPartnerBusyId(null);
+    if (rpcError) {
+      setPartnerError(rpcError.message);
+      return;
+    }
+    loadPartners();
+  };
+
+  const handleCancelPartnerRequest = async (id: string) => {
+    setPartnerBusyId(id);
+    setPartnerError(null);
+    const { error: rpcError } = await supabase.rpc('cancel_admin_partner_request', { p_request_id: id });
+    setPartnerBusyId(null);
+    if (rpcError) {
+      setPartnerError(rpcError.message);
+      return;
+    }
+    loadPartners();
+  };
+
+  const handleEndPartnership = async (id: string) => {
+    setPartnerBusyId(id);
+    setPartnerError(null);
+    const ended = partners.find((p) => p.id === id);
+    const { error: rpcError } = await supabase.rpc('end_admin_partnership', { p_partnership_id: id });
+    setPartnerBusyId(null);
+    if (rpcError) {
+      setPartnerError(rpcError.message);
+      return;
+    }
+    if (ended && selectedPartnerId === ended.partner_user_id) setSelectedPartnerId(null);
+    loadPartners();
+  };
+
   return (
     <Layout>
       <div className="flex items-center justify-between mb-5">
@@ -445,7 +538,26 @@ export function Groups() {
         <button className="btn-secondary flex-1" onClick={() => setShowJoin((v) => !v)}>
           Join with code
         </button>
+        <button className="btn-secondary flex-1" onClick={() => setShowPartners((v) => !v)}>
+          Partners{partners.length > 0 ? ` (${partners.length})` : ''}
+        </button>
       </div>
+
+      {showPartners ? (
+        <AdminPartnersPanel
+          partners={partners}
+          requests={partnerRequests}
+          busyId={partnerBusyId}
+          error={partnerError}
+          inviteUsername={inviteUsername}
+          onInviteUsernameChange={setInviteUsername}
+          inviteBusy={inviteBusy}
+          onInvite={handleInvitePartner}
+          onDecide={handleDecidePartnerRequest}
+          onCancel={handleCancelPartnerRequest}
+          onEnd={handleEndPartnership}
+        />
+      ) : null}
 
       {showCreate ? (
         <form onSubmit={handleCreate} className="receipt-card p-4 mb-4 space-y-3">
@@ -460,6 +572,34 @@ export function Groups() {
               placeholder="Goa Trippers"
             />
           </div>
+          {partners.length > 0 ? (
+            <div>
+              <label className="label-eyebrow block mb-1.5">Create as</label>
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPartnerId(null)}
+                  className={`chip ${selectedPartnerId === null ? 'chip-active' : ''}`}
+                >
+                  Just me
+                </button>
+                {partners.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setSelectedPartnerId(p.partner_user_id)}
+                    className={`chip ${selectedPartnerId === p.partner_user_id ? 'chip-active' : ''}`}
+                  >
+                    Jointly with @{p.partner_username}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-ink-faint mt-1">
+                A joint group makes both of you admins from the start — like a joint account alongside
+                your own.
+              </p>
+            </div>
+          ) : null}
           <div>
             <label className="label-eyebrow block mb-1.5">Passkey (optional)</label>
             <input
