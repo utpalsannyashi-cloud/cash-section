@@ -1,12 +1,13 @@
 import { FormEvent, MouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
+import { Icon } from '@/components/Icon';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { formatCurrency } from '@/utils/currency';
 import type { Group } from '@/types';
 
-type GroupWithRole = Group & { role: 'admin' | 'member'; member_count: number };
+type GroupWithRole = Group & { role: 'admin' | 'member'; member_count: number; settled: boolean };
 type Filter = 'all' | 'admin' | 'member';
 type ExpenseOverview = { id: string; description: string; amount: number; group_id: string; group_name: string; created_at: string };
 
@@ -79,7 +80,7 @@ export function Groups() {
           .from('group_members')
           .select('*', { count: 'exact', head: true })
           .eq('group_id', g.id);
-        return { ...g, member_count: count ?? 0 };
+        return { ...g, member_count: count ?? 0, settled: false };
       })
     );
     setGroups(withCounts);
@@ -96,11 +97,17 @@ export function Groups() {
       const groupIdForSession = new Map((sessions ?? []).map((s) => [s.id, s.group_id]));
 
       if (sessionIds.length > 0) {
-        const { data: exp } = await supabase
-          .from('expenses')
-          .select('id, description, amount, created_at, session_id')
-          .in('session_id', sessionIds)
-          .order('created_at', { ascending: false });
+        const [{ data: exp }, { data: settl }] = await Promise.all([
+          supabase
+            .from('expenses')
+            .select('id, description, amount, created_at, session_id')
+            .in('session_id', sessionIds)
+            .order('created_at', { ascending: false }),
+          // Just enough to tell whether a group is fully settled — the
+          // full settlement rows (with profile joins) only get loaded
+          // once someone opens the group itself.
+          supabase.from('settlements').select('session_id, is_paid').in('session_id', sessionIds)
+        ]);
 
         const withGroupName = (exp ?? []).map((e) => {
           const gid = groupIdForSession.get(e.session_id) ?? '';
@@ -119,6 +126,31 @@ export function Groups() {
           count: withGroupName.length,
           spend: withGroupName.reduce((sum, e) => sum + e.amount, 0)
         });
+
+        // A group only counts as "settled" once it actually has expenses —
+        // otherwise a brand-new group with nothing logged yet would show
+        // the same badge as one where every debt has been paid off. Beyond
+        // that, it mirrors exactly what the group's own Settle Up tab
+        // considers done: either nothing was ever owed (no settlement rows
+        // needed), or every computed transfer has been marked paid.
+        const groupsWithExpenses = new Set(withGroupName.map((e) => e.group_id));
+        const settlementsByGroup = new Map<string, { is_paid: boolean }[]>();
+        for (const s of settl ?? []) {
+          const gid = groupIdForSession.get(s.session_id);
+          if (!gid) continue;
+          const list = settlementsByGroup.get(gid) ?? [];
+          list.push({ is_paid: s.is_paid });
+          settlementsByGroup.set(gid, list);
+        }
+
+        setGroups(
+          withCounts.map((g) => {
+            if (!groupsWithExpenses.has(g.id)) return g;
+            const groupSettlements = settlementsByGroup.get(g.id) ?? [];
+            const settled = groupSettlements.length === 0 || groupSettlements.every((s) => s.is_paid);
+            return { ...g, settled };
+          })
+        );
       } else {
         setExpensesOverview([]);
         setExpenseTotals({ count: 0, spend: 0 });
@@ -538,13 +570,24 @@ export function Groups() {
                     {g.member_count} member{g.member_count === 1 ? '' : 's'}
                   </p>
                 </div>
-                <span
-                  className={`status-pill ${
-                    g.role === 'admin' ? 'bg-violet-light text-violet' : 'bg-ink/5 text-ink-faint'
-                  }`}
-                >
-                  {g.role}
-                </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {g.settled ? (
+                    <span
+                      className="status-pill bg-emerald-light text-emerald-dark flex items-center gap-1"
+                      title="Every expense in this group has been settled up"
+                    >
+                      <Icon name="check" size={12} />
+                      Settled up
+                    </span>
+                  ) : null}
+                  <span
+                    className={`status-pill ${
+                      g.role === 'admin' ? 'bg-violet-light text-violet' : 'bg-ink/5 text-ink-faint'
+                    }`}
+                  >
+                    {g.role}
+                  </span>
+                </div>
               </Link>
             </li>
           ))}
