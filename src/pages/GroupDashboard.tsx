@@ -4,13 +4,14 @@ import { Layout } from '@/components/Layout';
 import { AddExpenseModal, ParticipantLike } from '@/components/AddExpenseModal';
 import { ExpenseCard } from '@/components/ExpenseCard';
 import { SettlementSummary } from '@/components/SettlementSummary';
+import { JoinRequestsPanel } from '@/components/JoinRequestsPanel';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { deriveTotals, simplifyDebts } from '@/utils/settlement';
 import { formatCurrency } from '@/utils/currency';
 import type { ContributionSource, Expense, Group, GroupMember, Settlement } from '@/types';
 
-const CODE_PATTERN = /^[a-z0-9]{4,20}$/;
+const CODE_PATTERN = /^[a-z0-9]{6,20}$/;
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -275,7 +276,7 @@ export function GroupDashboard() {
     if (!groupId) return;
     const code = customCode.trim().toLowerCase();
     if (!CODE_PATTERN.test(code)) {
-      setCodeError('Use 4–20 lowercase letters/numbers, e.g. goa2026.');
+      setCodeError('Use 6–20 lowercase letters/numbers, e.g. goa2026.');
       return;
     }
     setSavingCode(true);
@@ -815,6 +816,8 @@ export function GroupDashboard() {
           </div>
         </div>
       ) : null}
+
+      {isAdmin && groupId ? <JoinRequestsPanel groupId={groupId} onApproved={load} /> : null}
 
       <div className="tab-bar">
         <button onClick={() => setView('expenses')} className={`tab-link ${view === 'expenses' ? 'tab-link-active' : ''}`}>

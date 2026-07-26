@@ -10,7 +10,7 @@ type GroupWithRole = Group & { role: 'admin' | 'member'; member_count: number };
 type Filter = 'all' | 'admin' | 'member';
 type ExpenseOverview = { id: string; description: string; amount: number; group_id: string; group_name: string; created_at: string };
 
-const CODE_PATTERN = /^[a-z0-9]{4,20}$/;
+const CODE_PATTERN = /^[a-z0-9]{6,20}$/;
 
 export function Groups() {
   const { user } = useAuth();
@@ -29,6 +29,9 @@ export function Groups() {
   const [codeError, setCodeError] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // Distinct from `error`: joining is now a request, so the happy path
+  // ends in "waiting on the admin" rather than the group appearing.
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   // Long-press action sheet (admin-owned groups only): rename, change
@@ -153,7 +156,7 @@ export function Groups() {
 
     const code = customCode.trim().toLowerCase();
     if (code && !CODE_PATTERN.test(code)) {
-      setCodeError('Use 4–20 lowercase letters/numbers, e.g. goa2026.');
+      setCodeError('Use 6–20 lowercase letters/numbers, e.g. goa2026.');
       return;
     }
 
@@ -166,7 +169,7 @@ export function Groups() {
     if (rpcError) {
       if (rpcError.message.includes('duplicate') || rpcError.message.includes('already taken')) {
         setCodeError('That passkey is already taken — pick another.');
-      } else if (rpcError.message.includes('4–20') || rpcError.message.includes('passkey')) {
+      } else if (rpcError.message.includes('6–20') || rpcError.message.includes('passkey')) {
         setCodeError(rpcError.message);
       } else {
         setError(rpcError.message);
@@ -183,24 +186,38 @@ export function Groups() {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    // unlock_group_by_code checks the group's access_code (the same passkey
-    // shown/set in the admin's "Change passkey" menu and used by guests on
-    // the Browse screen) and adds the caller as a member. This used to call
-    // a stale join_group_by_code RPC that checked a different, unused
-    // invite_code column, so entering a real group passkey here always
-    // failed with "Invalid invite code" — including for another admin
-    // trying to join your group.
-    const { error: rpcError } = await supabase.rpc('unlock_group_by_code', {
+    setNotice(null);
+    // unlock_group_by_code verifies the group's passkey and — as of
+    // migration 0016 — raises a join request instead of adding the
+    // caller straight into group_members. Approval is the admin's call,
+    // so the same wait applies to account holders as to passkey guests.
+    const { data, error: rpcError } = await supabase.rpc('unlock_group_by_code', {
       code: joinCode.trim().toLowerCase()
     });
     setBusy(false);
+
     if (rpcError) {
-      setError('Invalid passkey.');
+      setError(
+        /Too many incorrect passkeys/i.test(rpcError.message) ? rpcError.message : 'Invalid passkey.'
+      );
       return;
     }
+
+    const result = data as { status: string; group_id: string; group_name: string };
     setJoinCode('');
     setShowJoin(false);
-    loadGroups();
+
+    if (result.status === 'member') {
+      loadGroups();
+      return;
+    }
+    if (result.status === 'denied') {
+      setError(`${result.group_name}'s admin didn't approve your request to join.`);
+      return;
+    }
+    setNotice(
+      `Asked ${result.group_name}'s admin to let you in. The group shows up here once they approve.`
+    );
   };
 
   const openMenu = (g: GroupWithRole) => {
@@ -265,7 +282,7 @@ export function Groups() {
     if (!menuGroup) return;
     const code = passkeyValue.trim().toLowerCase();
     if (!CODE_PATTERN.test(code)) {
-      setActionError('Use 4–20 lowercase letters/numbers, e.g. goa2026.');
+      setActionError('Use 6–20 lowercase letters/numbers, e.g. goa2026.');
       return;
     }
     setActionBusy(true);
@@ -420,7 +437,7 @@ export function Groups() {
               placeholder="Leave blank to auto-generate, e.g. goa2026"
             />
             <p className="text-xs text-ink-faint mt-1">
-              Guests use this to unlock the whole group without an account. 4–20 lowercase letters/numbers.
+              Guests use this to unlock the whole group without an account. 6–20 lowercase letters/numbers.
             </p>
             {codeError ? <p className="text-brick text-xs mt-1">{codeError}</p> : null}
           </div>
@@ -432,19 +449,28 @@ export function Groups() {
 
       {showJoin ? (
         <form onSubmit={handleJoin} className="receipt-card p-4 mb-4 space-y-3">
-          <label className="label-eyebrow block">Invite code</label>
+          <label className="label-eyebrow block">Group passkey</label>
           <input
             required
             autoFocus
             value={joinCode}
             onChange={(e) => setJoinCode(e.target.value)}
             className="input-field font-mono"
-            placeholder="e.g. a1b2c3d4"
+            placeholder="e.g. goa2026"
           />
+          <p className="text-xs text-ink-faint">
+            The group's admin approves each request before you can see any expenses.
+          </p>
           <button type="submit" disabled={busy} className="btn-primary w-full">
-            {busy ? 'Joining…' : 'Join group'}
+            {busy ? 'Asking…' : 'Ask to join'}
           </button>
         </form>
+      ) : null}
+
+      {notice ? (
+        <div className="receipt-card p-3 mb-4 border-l-4 border-l-accent-sky">
+          <p className="text-sm text-ink-soft">{notice}</p>
+        </div>
       ) : null}
 
       {error ? <p className="text-brick text-sm mb-4">{error}</p> : null}
@@ -592,7 +618,7 @@ export function Groups() {
                   className="input-field font-mono"
                   placeholder="e.g. goa2026"
                 />
-                <p className="text-xs text-ink-faint">4–20 lowercase letters/numbers.</p>
+                <p className="text-xs text-ink-faint">6–20 lowercase letters/numbers.</p>
                 {actionError ? <p className="text-brick text-xs">{actionError}</p> : null}
                 <div className="flex gap-2">
                   <button type="button" onClick={() => setMenuMode('menu')} className="btn-secondary flex-1">
