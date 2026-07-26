@@ -18,6 +18,13 @@ export interface Group {
   invite_code: string;
   access_code: string;
   created_at: string;
+  // Explicit, admin-set designation that every expense in this group has
+  // been settled up — toggled from the groups list (see migration 0019).
+  // Independent of the computed settlement rows shown in a group's own
+  // Settle Up tab; nobody's expenses being auto-marked settled just
+  // because there was nothing to split.
+  marked_settled: boolean;
+  settled_at: string | null;
 }
 
 export interface GroupMember {
