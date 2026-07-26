@@ -76,3 +76,30 @@ export interface Settlement {
   from_profile?: Profile;
   to_profile?: Profile;
 }
+
+/**
+ * An accepted pairing with another account for jointly administering
+ * groups created going forward — like a joint bank account alongside
+ * your own individual one. Shaped to match what the list_admin_partners
+ * RPC returns: the OTHER person's id/username, already resolved
+ * server-side (see migration 0018).
+ */
+export interface AdminPartner {
+  id: string;
+  partner_user_id: string;
+  partner_username: string;
+  since: string | null;
+}
+
+/**
+ * A pending admin-partner invite, from either side. Matches
+ * list_partner_requests — one call covers both directions so the
+ * client doesn't need to reconcile two separate queries.
+ */
+export interface PartnerRequest {
+  id: string;
+  direction: 'incoming' | 'outgoing';
+  other_user_id: string;
+  other_username: string;
+  requested_at: string;
+}
