@@ -40,12 +40,13 @@ export function Groups() {
   const [settledBusyId, setSettledBusyId] = useState<string | null>(null);
 
   // Long-press action sheet (admin-owned groups only): rename, change
-  // passkey, or delete — without leaving the groups list.
+  // passkey, add a partner, or delete — without leaving the groups list.
   const [menuGroup, setMenuGroup] = useState<GroupWithRole | null>(null);
-  const [menuMode, setMenuMode] = useState<'menu' | 'rename' | 'passkey' | 'delete'>('menu');
+  const [menuMode, setMenuMode] = useState<'menu' | 'rename' | 'passkey' | 'addPartner' | 'delete'>('menu');
   const [renameValue, setRenameValue] = useState('');
   const [passkeyValue, setPasskeyValue] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const longPressTimer = useRef<number | null>(null);
   const longPressTriggered = useRef(false);
@@ -290,12 +291,14 @@ export function Groups() {
     setRenameValue(g.name);
     setPasskeyValue('');
     setActionError(null);
+    setActionNotice(null);
   };
 
   const closeMenu = () => {
     setMenuGroup(null);
     setMenuMode('menu');
     setActionError(null);
+    setActionNotice(null);
   };
 
   // Pointer-based long-press: works for touch and mouse alike. A short
@@ -389,6 +392,33 @@ export function Groups() {
       return;
     }
     closeMenu();
+    loadGroups();
+  };
+
+  // Retroactive counterpart to the "create as" picker: brings an
+  // already-accepted partner into a group that existed before the
+  // partnership did (or one made solo on purpose at the time).
+  // Doesn't touch any other group — this one is opt-in, per group.
+  const handleAddPartnerToGroup = async (partner: AdminPartner) => {
+    if (!menuGroup) return;
+    setActionBusy(true);
+    setActionError(null);
+    setActionNotice(null);
+    const { data, error: rpcError } = await supabase.rpc('add_partner_to_group', {
+      p_group_id: menuGroup.id,
+      p_partner_id: partner.partner_user_id
+    });
+    setActionBusy(false);
+    if (rpcError) {
+      setActionError(rpcError.message);
+      return;
+    }
+    const result = data as { already_admin: boolean };
+    setActionNotice(
+      result.already_admin
+        ? `@${partner.partner_username} is already an admin of this group.`
+        : `@${partner.partner_username} is now an admin of this group too.`
+    );
     loadGroups();
   };
 
@@ -777,6 +807,14 @@ export function Groups() {
                 >
                   Change passkey
                 </button>
+                {partners.length > 0 ? (
+                  <button
+                    onClick={() => setMenuMode('addPartner')}
+                    className="w-full text-left px-3 py-3 rounded-md hover:bg-ink/5 transition-colors text-sm"
+                  >
+                    Add a partner as admin
+                  </button>
+                ) : null}
                 <button
                   onClick={() => setMenuMode('delete')}
                   className="w-full text-left px-3 py-3 rounded-md hover:bg-brick/10 transition-colors text-sm text-brick"
@@ -839,6 +877,39 @@ export function Groups() {
                   Or generate one randomly
                 </button>
               </form>
+            ) : null}
+
+            {menuMode === 'addPartner' ? (
+              <div className="p-5 space-y-3">
+                <p className="text-sm text-ink-soft">
+                  Add one of your admin partners to "{menuGroup.name}" — they'll become an admin here
+                  too, even though this group was made before you partnered up (or was made solo on
+                  purpose). This only affects this one group.
+                </p>
+                {actionError ? <p className="text-brick text-sm">{actionError}</p> : null}
+                {actionNotice ? <p className="text-emerald-dark text-sm">{actionNotice}</p> : null}
+                <ul className="space-y-2">
+                  {partners.map((p) => (
+                    <li key={p.id} className="flex items-center gap-2.5">
+                      <span className="avatar-circle text-xs" aria-hidden>
+                        {p.partner_username.charAt(0).toUpperCase()}
+                      </span>
+                      <span className="flex-1 min-w-0 text-sm text-ink truncate">@{p.partner_username}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleAddPartnerToGroup(p)}
+                        disabled={actionBusy}
+                        className="btn-secondary text-xs px-2.5 py-1.5 shrink-0"
+                      >
+                        {actionBusy ? '…' : 'Add'}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <button type="button" onClick={() => setMenuMode('menu')} className="btn-secondary w-full">
+                  Back
+                </button>
+              </div>
             ) : null}
 
             {menuMode === 'delete' ? (
