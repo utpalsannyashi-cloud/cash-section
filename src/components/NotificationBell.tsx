@@ -16,14 +16,6 @@ function timeAgo(iso: string): string {
   return days + 'd ago';
 }
 
-/**
- * Bell icon in the header for real (non-guest) accounts. Covers three
- * kinds of activity server-populated into the notifications table
- * (see migration 0022): admin-partner invites/decisions, join requests
- * to groups you admin (plus their outcome), and new expenses logged in
- * groups you belong to. Realtime-subscribed so the badge updates live,
- * same pattern as JoinRequestsPanel and AdminPartnersPanel.
- */
 export function NotificationBell() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -42,45 +34,27 @@ export function NotificationBell() {
     setItems((data as AppNotification[]) ?? []);
   }, [user]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
-  // Realtime: new notifications land live, and mark-read from another
-  // tab/device stays in sync -- same pattern as JoinRequestsPanel.
   useEffect(() => {
     if (!user) return;
     const channel = supabase
       .channel('notifications-' + user.id)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notifications', filter: 'user_id=eq.' + user.id },
-        (payload) => {
-          setItems((prev) => [payload.new as AppNotification, ...prev].slice(0, 30));
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'notifications', filter: 'user_id=eq.' + user.id },
-        (payload) => {
-          const updated = payload.new as AppNotification;
-          setItems((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
-        }
-      )
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: 'user_id=eq.' + user.id }, (payload) => {
+        setItems((prev) => [payload.new as AppNotification, ...prev].slice(0, 30));
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications', filter: 'user_id=eq.' + user.id }, (payload) => {
+        const updated = payload.new as AppNotification;
+        setItems((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+      })
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [user]);
 
-  // Close the dropdown on an outside click.
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
@@ -122,14 +96,14 @@ export function NotificationBell() {
       >
         <Icon name="bell" size={16} />
         {unreadCount > 0 ? (
-          <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-brick text-white text-[10px] font-mono leading-4 text-center">
+          <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-mono font-semibold leading-[18px] text-center">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         ) : null}
       </button>
 
       {open ? (
-        <div className="absolute right-0 mt-2 w-80 max-w-[90vw] bg-paper border border-rule rounded-lg shadow-lg z-30 overflow-hidden">
+        <div className="fixed inset-x-3 top-16 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-80 bg-paper border border-rule rounded-lg shadow-lg z-30 overflow-hidden">
           <div className="flex items-center justify-between px-3 py-2.5 border-b border-rule">
             <p className="label-eyebrow">Notifications</p>
             {unreadCount > 0 ? (
