@@ -251,3 +251,24 @@
     bottom: calc(1.25rem + env(safe-area-inset-bottom));
   }
 }
+
+
+/* Native <input type="date"> ignores this app's font-size/text-align on
+   its internal shadow-DOM value display on many Android WebViews -- it
+   renders centered and noticeably larger than every other field, out of
+   step with the rest of the form. Target the value/segment pseudo-
+   elements directly (Blink/WebKit -- Chrome, Samsung Internet, and
+   Android WebView cover this app's mobile-first audience) so it matches
+   every other input. Placed unlayered (outside @layer) so it always wins
+   over .input-field regardless of source order, per Tailwind's cascade
+   layers. */
+input[type='date'] {
+  text-align: left;
+}
+input[type='date']::-webkit-date-and-time-value {
+  text-align: left;
+  font-size: 0.875rem;
+}
+input[type='date']::-webkit-datetime-edit {
+  font-size: 0.875rem;
+}
