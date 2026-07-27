@@ -114,7 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // session with a passkey), upgrade that same account in place so their
     // existing session access carries over, instead of creating a new user.
     if (isGuest && session?.user) {
-      const { error } = await supabase.auth.updateUser({ email, password, data: { username } });
+      const { error } = await supabase.auth.updateUser({ email, password, data: { username } }, { emailRedirectTo: window.location.origin });
       if (error) throw error;
       await supabase.from('profiles').update({ username }).eq('id', session.user.id);
       return;
@@ -123,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { username } }
+      options: { data: { username }, emailRedirectTo: window.location.origin }
     });
     if (error) throw error;
   };
