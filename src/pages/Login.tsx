@@ -1,10 +1,12 @@
 import { FormEvent, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 
 export function Login() {
   const { signIn } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const next = searchParams.get('next');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -16,7 +18,7 @@ export function Login() {
     setLoading(true);
     try {
       await signIn(email, password);
-      navigate('/groups');
+      navigate(next || '/groups');
     } catch (err: any) {
       setError(err.message ?? 'Could not sign in. Check your details and try again.');
     } finally {
@@ -63,7 +65,7 @@ export function Login() {
         </form>
         <p className="text-center text-sm text-ink-soft mt-4">
           New here?{' '}
-          <Link to="/signup" className="text-emerald font-medium">
+          <Link to={next ? '/signup?next=' + encodeURIComponent(next) : '/signup'} className="text-emerald font-medium">
             Create an account
           </Link>
         </p>
