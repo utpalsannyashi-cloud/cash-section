@@ -187,6 +187,23 @@ export function GroupDashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionIds.join(',')]);
 
+    // Membership changes (a partner added mid-session, someone leaving, a
+    // contribution-start edit) also need to refresh the page live -- without
+    // this, a tab left open across such a change can keep computing
+    // settlements against a stale member list, silently mis-splitting new
+    // expenses until the page is reloaded.
+    useEffect(() => {
+          if (!groupId) return;
+          const channel = supabase
+            .channel(`group-members-${groupId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members', filter: `group_id=eq.${groupId}` }, () => load())
+            .subscribe();
+
+          return () => {
+                  supabase.removeChannel(channel);
+          };
+    }, [groupId, load]);
+
   const totalSpend = expenses.reduce((sum, e) => sum + e.amount, 0);
   // A member only counts toward NEW equal-split expenses once today's date
   // reaches their contribution_start_date — lets an admin backdate liability
@@ -350,7 +367,7 @@ export function GroupDashboard() {
   // the trg_check_contribution_start trigger derives contribution_start_date
   // server-side from joined_at / the group's created_at, so there's no risk
   // of the client and DB disagreeing. Only 'custom' sends an explicit date,
-  // and the trigger still floors it at the group's creation date.
+  // and the trigger accepts it as-is, with no floor at the group's creation date — so it can predate the group, matching a real expense from before this group existed here.
   const handleUpdateContribution = async (source: ContributionSource) => {
     if (!contributionEditTarget || !groupId) return;
     if (source === 'custom' && !contributionCustomDate) {
@@ -728,7 +745,6 @@ export function GroupDashboard() {
                     <input
                       type="date"
                       value={contributionCustomDate}
-                      min={group.created_at.slice(0, 10)}
                       onChange={(e) => setContributionCustomDate(e.target.value)}
                       className="input-field flex-1"
                     />
