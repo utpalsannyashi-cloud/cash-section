@@ -26,7 +26,12 @@ export function AdminPartnersPanel({
   onInvite,
   onDecide,
   onCancel,
-  onEnd
+  onEnd,
+    inviteLinkUrl,
+    inviteLinkBusy,
+    inviteLinkCopied,
+    onCopyInviteLink,
+    onRegenerateInviteLink
 }: {
   partners: AdminPartner[];
   requests: PartnerRequest[];
@@ -39,6 +44,11 @@ export function AdminPartnersPanel({
   onDecide: (id: string, approve: boolean) => void;
   onCancel: (id: string) => void;
   onEnd: (id: string) => void;
+    inviteLinkUrl: string | null;
+    inviteLinkBusy: boolean;
+    inviteLinkCopied: boolean;
+    onCopyInviteLink: () => void;
+    onRegenerateInviteLink: () => void;
 }) {
   const incoming = requests.filter((r) => r.direction === 'incoming');
   const outgoing = requests.filter((r) => r.direction === 'outgoing');
@@ -68,7 +78,32 @@ export function AdminPartnersPanel({
 
       {error ? <p className="text-brick text-xs">{error}</p> : null}
 
-      {incoming.length > 0 ? (
+      <div className="pt-3 border-t border-dashed border-rule">
+        <p className="text-[11px] text-ink-faint mb-2">Or share an invite link</p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onCopyInviteLink}
+            disabled={inviteLinkBusy}
+            className="btn-secondary flex-1 text-xs"
+          >
+            {inviteLinkBusy ? '…' : inviteLinkCopied ? 'Copied!' : 'Copy invite link'}
+          </button>
+          <button
+            type="button"
+            onClick={onRegenerateInviteLink}
+            disabled={inviteLinkBusy}
+            title="Invalidate the old link and generate a new one"
+            className="text-xs text-ink-faint hover:text-ink transition-colors shrink-0"
+          >
+            Regenerate
+          </button>
+        </div>
+        <p className="text-[11px] text-ink-faint mt-1">
+          Anyone with this link can partner with you — regenerating invalidates the old one.
+        </p>
+      </div>
+{incoming.length > 0 ? (
         <div>
           <p className="text-[11px] text-ink-faint mb-2">Waiting on your answer</p>
           <ul className="space-y-2">
