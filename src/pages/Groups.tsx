@@ -66,6 +66,14 @@ export function Groups() {
   // Which partner (if any) to make a co-admin of the group being
   // created. null = solo, same as every group made before this feature.
   const [selectedPartnerId, setSelectedPartnerId] = useState<string | null>(null);
+  // A per-account, standing invite link -- an alternative to the by-username
+  // invite above for when you don't know their exact username to type. Lazily
+  // created (via get_or_create_partner_invite_link) the first time it's
+  // copied, rather than up front, so opening the panel never fires an extra
+  // write.
+  const [inviteLinkToken, setInviteLinkToken] = useState<string | null>(null);
+  const [inviteLinkBusy, setInviteLinkBusy] = useState(false);
+  const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
 
   // AI insights FAB, mirroring the one inside a single group's dashboard.
   // Here there's no single group in scope, so a lone group jumps straight
@@ -479,6 +487,54 @@ export function Groups() {
     loadPartners();
   };
 
+
+
+    // Lazily provisions this account's standing invite-link token via
+    // get_or_create_partner_invite_link (idempotent -- same token every call
+    // after the first), so opening the Partners panel never fires an extra
+    // write; only copying or regenerating the link does.
+    const ensureInviteLink = async (): Promise<string | null> => {
+          if (inviteLinkToken) return inviteLinkToken;
+          const { data, error: rpcError } = await supabase.rpc('get_or_create_partner_invite_link');
+          if (rpcError) {
+                  setPartnerError(rpcError.message);
+                  return null;
+          }
+          const token = data as string;
+          setInviteLinkToken(token);
+          return token;
+    };
+
+    const handleCopyInviteLink = async () => {
+          setInviteLinkBusy(true);
+          setPartnerError(null);
+          const token = await ensureInviteLink();
+          setInviteLinkBusy(false);
+          if (!token) return;
+          await navigator.clipboard.writeText(window.location.origin + '/partner-invite/' + token);
+          setInviteLinkCopied(true);
+          setTimeout(() => setInviteLinkCopied(false), 1500);
+    };
+
+    // Unlike the copy above, this always hits the DB -- a fresh token
+    // invalidates the old link outright, in case it was shared somewhere it
+    // shouldn't have been.
+    const handleRegenerateInviteLink = async () => {
+          setInviteLinkBusy(true);
+          setPartnerError(null);
+          const { data, error: rpcError } = await supabase.rpc('regenerate_partner_invite_link');
+          if (rpcError) {
+                  setInviteLinkBusy(false);
+                  setPartnerError(rpcError.message);
+                  return;
+          }
+          const token = data as string;
+          setInviteLinkToken(token);
+          await navigator.clipboard.writeText(window.location.origin + '/partner-invite/' + token);
+          setInviteLinkBusy(false);
+          setInviteLinkCopied(true);
+          setTimeout(() => setInviteLinkCopied(false), 1500);
+    };
   return (
     <Layout>
       <div className="flex items-center justify-between mb-5">
@@ -582,6 +638,11 @@ export function Groups() {
           onDecide={handleDecidePartnerRequest}
           onCancel={handleCancelPartnerRequest}
           onEnd={handleEndPartnership}
+                  inviteLinkUrl={inviteLinkToken ? window.location.origin + '/partner-invite/' + inviteLinkToken : null}
+                  inviteLinkBusy={inviteLinkBusy}
+                  inviteLinkCopied={inviteLinkCopied}
+                  onCopyInviteLink={handleCopyInviteLink}
+                  onRegenerateInviteLink={handleRegenerateInviteLink}
         />
       ) : null}
 
