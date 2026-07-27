@@ -1,11 +1,13 @@
 import { FormEvent, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 
 export function Signup() {
   const { signUp } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const next = searchParams.get('next');
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -34,7 +36,7 @@ export function Signup() {
       }
 
       await signUp(email, password, username);
-      navigate('/groups');
+      navigate(next || '/groups');
     } catch (err: any) {
       // The DB also enforces uniqueness as a backstop against race conditions,
       // so surface that error nicely too if it slips through.
@@ -99,7 +101,7 @@ export function Signup() {
         </form>
         <p className="text-center text-sm text-ink-soft mt-4">
           Already have an account?{' '}
-          <Link to="/login" className="text-emerald font-medium">
+          <Link to={next ? '/login?next=' + encodeURIComponent(next) : '/login'} className="text-emerald font-medium">
             Sign in
           </Link>
         </p>
