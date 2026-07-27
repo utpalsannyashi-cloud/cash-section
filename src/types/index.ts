@@ -110,3 +110,31 @@ export interface PartnerRequest {
   other_username: string;
   requested_at: string;
 }
+
+export type NotificationType =
+  | 'partner_invite'
+  | 'partner_accepted'
+  | 'partner_declined'
+  | 'join_request'
+  | 'join_approved'
+  | 'join_denied'
+  | 'expense_added';
+
+/**
+ * A single item in the notification bell. Server-populated only — see
+ * migration 0022's triggers on admin_partners/join_requests/expenses.
+ * `group_id`/`actor_id` are convenience references for navigating to
+ * the relevant group or showing who triggered it; either can be null
+ * (e.g. a partner invite has no group_id).
+ */
+export interface AppNotification {
+  id: string;
+  user_id: string;
+  type: NotificationType;
+  title: string;
+  body: string | null;
+  group_id: string | null;
+  actor_id: string | null;
+  read: boolean;
+  created_at: string;
+}
