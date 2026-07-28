@@ -272,3 +272,17 @@ input[type='date']::-webkit-date-and-time-value {
 input[type='date']::-webkit-datetime-edit {
   font-size: 0.875rem;
 }
+
+
+/* iOS Safari's native <input type="date"> ignores the pseudo-element
+   overrides above entirely -- it renders its own system-style control
+   (the "Jul 27, 2026" spelled-out format, centered, at a larger size)
+   regardless of font-size/text-align set on ::-webkit-date-and-time-value.
+   Turning off the native appearance drops it back to a plain text box that
+   inherits .input-field's font-size and left alignment like every other
+   field, while the input's type="date" still opens the native picker on
+   tap -- appearance is purely cosmetic and unrelated to that behavior. */
+input[type='date'] {
+     -webkit-appearance: none;
+     appearance: none;
+}
