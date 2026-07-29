@@ -536,7 +536,7 @@ export function Groups() {
           setTimeout(() => setInviteLinkCopied(false), 1500);
     };
   return (
-    <Layout>
+    <Layout onAskAi={groups.length > 0 ? handleAskAi : undefined}>
       <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="font-mono text-xl font-semibold">Your groups</h1>
@@ -1019,18 +1019,6 @@ export function Groups() {
             </div>
           </div>
         </div>
-      ) : null}
-
-      {groups.length > 0 ? (
-        <button
-          type="button"
-          onClick={handleAskAi}
-          aria-label="Ask the AI about spending patterns"
-          title="Ask the AI about spending patterns"
-          className="fab"
-        >
-          ✦
-        </button>
       ) : null}
     </Layout>
   );
