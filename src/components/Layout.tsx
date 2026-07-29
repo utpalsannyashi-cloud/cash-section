@@ -5,7 +5,21 @@ import { useTheme } from '@/context/ThemeContext';
 import { Icon } from '@/components/Icon';
 import { NotificationBell } from '@/components/NotificationBell';
 
-export function Layout({ children, back }: { children: ReactNode; back?: string }) {
+export function Layout({
+  children,
+  back,
+  onAskAi
+}: {
+  children: ReactNode;
+  back?: string;
+  /** Renders a compact "AI" button in the header, next to the theme toggle.
+   * Pages that have an AI insights view for what they're showing (Groups,
+   * GroupDashboard, SessionDetail) pass this in; pages that don't just omit
+   * it and no button appears. Replaces the old bottom-right floating "ask
+   * AI" button, which sat on its own regardless of what else was in the
+   * header and didn't match the rest of the app's controls. */
+  onAskAi?: () => void;
+}) {
   const { profile, signOut, isGuest, isMasterAdmin } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
@@ -39,6 +53,16 @@ export function Layout({ children, back }: { children: ReactNode; back?: string 
             >
               {theme === 'dark' ? <Icon name="sun" size={16} /> : <Icon name="moon" size={16} />}
             </button>
+            {onAskAi ? (
+              <button
+                onClick={onAskAi}
+                aria-label="Ask the AI about spending patterns"
+                title="Ask the AI about spending patterns"
+                className="w-8 h-8 flex items-center justify-center rounded-md border border-emerald/30 bg-emerald/10 text-emerald text-[10px] font-mono font-bold hover:bg-emerald/20 transition-colors shrink-0"
+              >
+                AI
+              </button>
+            ) : null}
             {profile && !isGuest ? <NotificationBell /> : null}
             {profile && !isGuest ? (
               <div className="flex items-center gap-2 sm:gap-3">
@@ -72,9 +96,11 @@ export function Layout({ children, back }: { children: ReactNode; back?: string 
                     await signOut();
                     navigate('/');
                   }}
-                  className="text-xs px-2.5 py-1.5 rounded-md border border-rule text-ink-faint hover:text-brick hover:border-brick/40 transition-colors whitespace-nowrap"
+                  aria-label="Sign out"
+                  title="Sign out"
+                  className="w-8 h-8 flex items-center justify-center rounded-md border border-rule text-ink-faint hover:text-brick hover:border-brick/40 transition-colors shrink-0"
                 >
-                  Sign out
+                  <Icon name="logout" size={16} />
                 </button>
               </div>
             ) : (
