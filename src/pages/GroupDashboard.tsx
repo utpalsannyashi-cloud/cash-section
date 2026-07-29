@@ -457,7 +457,7 @@ export function GroupDashboard() {
   }
 
   return (
-    <Layout back="/groups">
+    <Layout back="/groups" onAskAi={() => navigate(`/groups/${groupId}/insights`)}>
       <div className="mb-5">
         <h1 className="font-mono text-xl font-semibold">{group.name}</h1>
         <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -982,15 +982,6 @@ export function GroupDashboard() {
           }}
         />
       ) : null}
-
-      <Link
-        to={`/groups/${groupId}/insights`}
-        aria-label="Ask the AI about spending patterns"
-        title="Ask the AI about spending patterns"
-        className="fab"
-      >
-        ✦
-      </Link>
     </Layout>
   );
 }
