@@ -31,7 +31,8 @@ export type IconName =
   | 'plus'
   | 'users'
   | 'receipt'
-  | 'bell';
+  | 'bell'
+    | 'logout';
 
 // Stroked paths only, so every icon responds to strokeWidth uniformly.
 const PATHS: Record<IconName, string> = {
@@ -47,7 +48,8 @@ const PATHS: Record<IconName, string> = {
   plus: 'M12 5v14M5 12h14',
   users: 'M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM2.5 20c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c2.1.7 3.5 2.4 3.5 5.2',
   receipt: 'M6 3.5h12v17l-3-1.5-3 1.5-3-1.5-3 1.5zM9.5 8h5M9.5 12h5',
-  bell: 'M6 8a6 6 0 1 1 12 0c0 3.6 1 5.6 1.8 6.7a.6.6 0 0 1-.5 1H4.7a.6.6 0 0 1-.5-1C5 13.6 6 11.6 6 8zM9.5 18.5a2.5 2.5 0 0 0 5 0'
+  bell: 'M6 8a6 6 0 1 1 12 0c0 3.6 1 5.6 1.8 6.7a.6.6 0 0 1-.5 1H4.7a.6.6 0 0 1-.5-1C5 13.6 6 11.6 6 8zM9.5 18.5a2.5 2.5 0 0 0 5 0',
+    logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9'
 };
 
 export function Icon({
