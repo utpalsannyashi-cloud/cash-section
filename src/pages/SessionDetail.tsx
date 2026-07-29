@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { AddExpenseModal, ParticipantLike } from '@/components/AddExpenseModal';
 import { ExpenseCard } from '@/components/ExpenseCard';
@@ -16,6 +16,7 @@ import type { Expense, Session, Settlement } from '@/types';
 // link still resolves to something useful instead of a dead end.
 export function SessionDetail() {
   const { sessionId } = useParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [session, setSession] = useState<Session | null>(null);
   const [groupId, setGroupId] = useState<string | null>(null);
@@ -156,7 +157,7 @@ export function SessionDetail() {
   }
 
   return (
-    <Layout back={`/groups/${groupId}`}>
+    <Layout back={`/groups/${groupId}`} onAskAi={groupId ? () => navigate(`/groups/${groupId}/insights`) : undefined}>
       <div className="mb-5">
         <div className="flex items-center justify-between">
           <h1 className="font-mono text-xl font-semibold">{session.title}</h1>
@@ -262,17 +263,6 @@ export function SessionDetail() {
             load();
           }}
         />
-      ) : null}
-
-      {groupId ? (
-        <Link
-          to={`/groups/${groupId}/insights`}
-          aria-label="Ask the AI about spending patterns"
-          title="Ask the AI about spending patterns"
-          className="fab"
-        >
-          ✦
-        </Link>
       ) : null}
     </Layout>
   );
