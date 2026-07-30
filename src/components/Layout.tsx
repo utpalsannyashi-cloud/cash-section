@@ -26,6 +26,14 @@ export function Layout({
   const location = useLocation();
   const isMasterActive = location.pathname.startsWith('/master');
 
+  // Master admins always get the cross-group "all groups" AI chat from the
+  // header button, no matter which page they're on -- this overrides
+  // whatever (if anything) the current page passed in via onAskAi, so
+  // Groups/GroupDashboard/SessionDetail don't need any master-admin-specific
+  // wiring of their own. Regular users keep the per-page onAskAi behavior.
+  const askAi = isMasterAdmin ? () => navigate('/insights') : onAskAi;
+  const askAiLabel = isMasterAdmin ? 'Ask the AI about spending across every group' : 'Ask the AI about spending patterns';
+
   return (
     <div className="min-h-dvh flex flex-col">
       <header className="sticky top-0 z-10 bg-paper/90 backdrop-blur border-b border-rule">
@@ -53,11 +61,11 @@ export function Layout({
             >
               {theme === 'dark' ? <Icon name="sun" size={16} /> : <Icon name="moon" size={16} />}
             </button>
-            {onAskAi ? (
+            {askAi ? (
               <button
-                onClick={onAskAi}
-                aria-label="Ask the AI about spending patterns"
-                title="Ask the AI about spending patterns"
+                onClick={askAi}
+                aria-label={askAiLabel}
+                title={askAiLabel}
                 className="w-8 h-8 flex items-center justify-center rounded-md border border-emerald/30 bg-emerald/10 text-emerald text-[10px] font-mono font-bold hover:bg-emerald/20 transition-colors shrink-0"
               >
                 AI
@@ -87,7 +95,7 @@ export function Layout({
                     // signOut() immediately drops the user into a fresh
                     // anonymous/guest session. The intended landing spot after
                     // sign-out is the guest "what's your name? / group passkey"
-                    // screen (Home -> Browse), not the admin login form — but
+                    // screen (Home -> Browse), not the admin login form -- but
                     // if sign-out happened on a requireFull route (e.g. /groups)
                     // ProtectedRoute would otherwise bounce the fresh guest
                     // session straight to /login before Home ever got a look.
