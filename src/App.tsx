@@ -7,6 +7,7 @@ import { Groups } from '@/pages/Groups';
 import { GroupDashboard } from '@/pages/GroupDashboard';
 import { SessionDetail } from '@/pages/SessionDetail';
 import { AdminInsights } from '@/pages/AdminInsights';
+import { AllGroupsInsights } from '@/pages/AllGroupsInsights';
 import { MasterAdmin } from '@/pages/MasterAdmin';
 import { PartnerInviteAccept } from '@/pages/PartnerInviteAccept';
 
@@ -15,7 +16,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
-              <Route path="/partner-invite/:token" element={<PartnerInviteAccept />} />
+      <Route path="/partner-invite/:token" element={<PartnerInviteAccept />} />
       <Route path="/" element={<Home />} />
       <Route
         path="/groups"
@@ -38,6 +39,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <AdminInsights />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/insights"
+        element={
+          <ProtectedRoute requireFull>
+            <AllGroupsInsights />
           </ProtectedRoute>
         }
       />
