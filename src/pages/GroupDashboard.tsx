@@ -42,7 +42,7 @@ export function GroupDashboard() {
   // Loaded up front rather than only at settle-up time, so the group can
   // be told about money owed to a removed member before anyone presses
   // Split up.
-  const [splits, setSplits] = useState<{ user_id: string; share: number }[]>([]);
+  const [splits, setSplits] = useState<{ user_id: string; share: number; expense_id: string }[]>([]);
   // Admin's call on what to do with that money. 'repay' keeps the
   // departed member in the settlement as a creditor; 'absorb' spreads
   // their credit across everyone still here instead.
@@ -155,7 +155,8 @@ export function GroupDashboard() {
         .in('expenses.session_id', ids);
       setSplits(((spl as unknown as { user_id: string; share: number }[]) ?? []).map((r) => ({
         user_id: r.user_id,
-        share: Number(r.share)
+        share: Number(r.share),
+        expense_id: r.expense_id
       })));
     } else {
       setExpenses([]);
@@ -225,10 +226,18 @@ export function GroupDashboard() {
   // Someone an admin removed who had paid out more than they consumed.
   // The group still owes them, and until this was handled the money
   // quietly disappeared from the settlement.
+  const settleableExpenses = group?.settled_through
+    ? expenses.filter((e) => new Date(e.created_at) > new Date(group.settled_through as string))
+    : expenses;
+  const settleableExpenseIds = new Set(settleableExpenses.map((e) => e.id));
+  const settleableSplits = group?.settled_through
+    ? splits.filter((s) => settleableExpenseIds.has(s.expense_id))
+    : splits;
+
   const departedCredits = findDepartedCredits(
     activeMembers.map((m) => m.user_id),
-    expenses.map((e) => ({ paid_by: e.paid_by, amount: Number(e.amount) })),
-    splits
+    settleableExpenses.map((e) => ({ paid_by: e.paid_by, amount: Number(e.amount) })),
+    settleableSplits
   );
   const departedTotal = departedCredits.reduce((sum, d) => sum + d.amount, 0);
   // They're gone from group_members, so their name has to come from an
@@ -259,15 +268,38 @@ export function GroupDashboard() {
     setEditingExpense(null);
   };
 
+  const handleStartFreshRound = async () => {
+    if (!groupId) return;
+    const ok = window.confirm(
+      "Start a fresh round? Expenses added so far will be marked settled and won't be included the next time you split up."
+    );
+    if (!ok) return;
+    await supabase.from('groups').update({ settled_through: new Date().toISOString() }).eq('id', groupId);
+    await load();
+  };
+
+  const handleResetSettlementCheckpoint = async () => {
+    if (!groupId) return;
+    const ok = window.confirm('Include every expense in the next split again?');
+    if (!ok) return;
+    await supabase.from('groups').update({ settled_through: null }).eq('id', groupId);
+    await load();
+  };
+
   const handleComputeSettlement = async () => {
     if (sessionIds.length === 0) return;
     setComputing(true);
 
-    const { data: allExpenses } = await supabase.from('expenses').select('paid_by, amount').in('session_id', sessionIds);
-    const { data: allSplits } = await supabase
-      .from('expense_splits')
-      .select('user_id, share, expense_id, expenses!inner(session_id)')
-      .in('expenses.session_id', sessionIds);
+    let expensesQuery = supabase.from('expenses').select('id, paid_by, amount').in('session_id', sessionIds);
+    if (group?.settled_through) {
+      expensesQuery = expensesQuery.gt('created_at', group.settled_through);
+    }
+    const { data: allExpenses } = await expensesQuery;
+    const settleableIds = (allExpenses ?? []).map((e: any) => e.id);
+    const { data: allSplits } =
+      settleableIds.length === 0
+        ? { data: [] as any[] }
+        : await supabase.from('expense_splits').select('user_id, share, expense_id').in('expense_id', settleableIds);
 
     const participantIds = activeMembers.map((m) => m.user_id);
     const totals = deriveTotals(participantIds, allExpenses ?? [], (allSplits as any) ?? [], {
@@ -952,6 +984,24 @@ export function GroupDashboard() {
             </div>
           ) : null}
 
+          {group?.settled_through ? (
+            <div className="receipt-card p-3 mb-3">
+              <p className="text-xs text-ink-faint">
+                Showing expenses since {new Date(group.settled_through).toLocaleDateString()}. Earlier expenses were
+                already settled and won't be split again.
+              </p>
+              {isAdmin ? (
+                <button
+                  type="button"
+                  onClick={handleResetSettlementCheckpoint}
+                  className="text-xs text-ink-faint hover:text-brick mt-1 underline"
+                >
+                  Include everything instead
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
           <button onClick={handleComputeSettlement} disabled={computing} className="btn-primary w-full">
             {computing ? 'Splitting…' : settlements.length > 0 ? 'Re-split' : 'Split up'}
           </button>
@@ -962,6 +1012,12 @@ export function GroupDashboard() {
             canMarkPaid={(s) => s.from_user === user?.id || s.to_user === user?.id || isAdmin}
             onTogglePaid={toggleSettlementPaid}
           />
+
+          {isAdmin && settlements.length > 0 ? (
+            <button type="button" onClick={handleStartFreshRound} className="btn-ghost w-full mt-2 text-xs">
+              Start a fresh round from today
+            </button>
+          ) : null}
         </div>
       )}
 
