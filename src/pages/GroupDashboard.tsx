@@ -151,9 +151,9 @@ export function GroupDashboard() {
       // owed money. Cheap enough to load with everything else.
       const { data: spl } = await supabase
         .from('expense_splits')
-        .select('user_id, share, expenses!inner(session_id)')
+        .select('user_id, share, expense_id, expenses!inner(session_id)')
         .in('expenses.session_id', ids);
-      setSplits(((spl as unknown as { user_id: string; share: number }[]) ?? []).map((r) => ({
+      setSplits(((spl as unknown as { user_id: string; share: number; expense_id: string }[]) ?? []).map((r) => ({
         user_id: r.user_id,
         share: Number(r.share),
         expense_id: r.expense_id
