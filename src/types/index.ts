@@ -25,6 +25,9 @@ export interface Group {
   // because there was nothing to split.
   marked_settled: boolean;
   settled_at: string | null;
+  // Expenses at or before this are excluded from the next settlement
+  // computation. Null means include everything.
+  settled_through: string | null;
 }
 
 export interface GroupMember {
