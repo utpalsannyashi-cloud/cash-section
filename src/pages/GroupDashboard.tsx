@@ -94,6 +94,12 @@ export function GroupDashboard() {
   // since it needs to show a scrollable pick-list rather than a single tap.
   const [showExpensePicker, setShowExpensePicker] = useState(false);
 
+  // Admin-only: the settlement checkpoint (see migration 0023 and
+  // handleStartFreshRound / handleResetSettlementCheckpoint below). Surfaced
+  // so a failed update() is never silently swallowed again — that's exactly
+  // how settled_through went missing from the schema for as long as it did.
+  const [checkpointError, setCheckpointError] = useState<string | null>(null);
+
   const isAdmin = members.find((m) => m.user_id === user?.id)?.role === 'admin';
 
   const load = useCallback(async () => {
@@ -274,7 +280,15 @@ export function GroupDashboard() {
       "Start a fresh round? Expenses added so far will be marked settled and won't be included the next time you split up."
     );
     if (!ok) return;
-    await supabase.from('groups').update({ settled_through: new Date().toISOString() }).eq('id', groupId);
+    setCheckpointError(null);
+    const { error } = await supabase
+      .from('groups')
+      .update({ settled_through: new Date().toISOString() })
+      .eq('id', groupId);
+    if (error) {
+      setCheckpointError(error.message);
+      return;
+    }
     await load();
   };
 
@@ -282,7 +296,12 @@ export function GroupDashboard() {
     if (!groupId) return;
     const ok = window.confirm('Include every expense in the next split again?');
     if (!ok) return;
-    await supabase.from('groups').update({ settled_through: null }).eq('id', groupId);
+    setCheckpointError(null);
+    const { error } = await supabase.from('groups').update({ settled_through: null }).eq('id', groupId);
+    if (error) {
+      setCheckpointError(error.message);
+      return;
+    }
     await load();
   };
 
@@ -1013,6 +1032,8 @@ export function GroupDashboard() {
             onTogglePaid={toggleSettlementPaid}
           />
 
+          {checkpointError ? <p className="text-brick text-xs mt-2">{checkpointError}</p> : null}
+          
           {isAdmin && settlements.length > 0 ? (
             <button type="button" onClick={handleStartFreshRound} className="btn-ghost w-full mt-2 text-xs">
               Start a fresh round from today
