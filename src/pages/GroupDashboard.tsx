@@ -94,6 +94,20 @@ export function GroupDashboard() {
   // since it needs to show a scrollable pick-list rather than a single tap.
   const [showExpensePicker, setShowExpensePicker] = useState(false);
 
+  // Admin-only: the settlement checkpoint (see handleStartFreshRound /
+  // handleResetSettlementCheckpoint below, and settled_through on Group).
+  // Surfaced so a failed update() is never silently swallowed.
+  const [checkpointError, setCheckpointError] = useState<string | null>(null);
+
+  // Bundles a checkpoint into the "set contribution start" flow below.
+  // Setting a member's contribution_start_date only ever changes who's
+  // folded into NEW equal-split expenses — it was never meant to (and
+  // doesn't) retroactively exclude older expenses from the next re-split.
+  // That's what settled_through does, but it's a separate, easy-to-miss
+  // action — this lets an admin opt into both from one place instead of
+  // needing to discover "Start a fresh round" on their own afterwards.
+  const [alsoStartFreshRound, setAlsoStartFreshRound] = useState(false);
+
   const isAdmin = members.find((m) => m.user_id === user?.id)?.role === 'admin';
 
   const load = useCallback(async () => {
@@ -274,7 +288,15 @@ export function GroupDashboard() {
       "Start a fresh round? Expenses added so far will be marked settled and won't be included the next time you split up."
     );
     if (!ok) return;
-    await supabase.from('groups').update({ settled_through: new Date().toISOString() }).eq('id', groupId);
+    setCheckpointError(null);
+    const { error } = await supabase
+      .from('groups')
+      .update({ settled_through: new Date().toISOString() })
+      .eq('id', groupId);
+    if (error) {
+      setCheckpointError(error.message);
+      return;
+    }
     await load();
   };
 
@@ -282,7 +304,12 @@ export function GroupDashboard() {
     if (!groupId) return;
     const ok = window.confirm('Include every expense in the next split again?');
     if (!ok) return;
-    await supabase.from('groups').update({ settled_through: null }).eq('id', groupId);
+    setCheckpointError(null);
+    const { error } = await supabase.from('groups').update({ settled_through: null }).eq('id', groupId);
+    if (error) {
+      setCheckpointError(error.message);
+      return;
+    }
     await load();
   };
 
@@ -422,13 +449,28 @@ export function GroupDashboard() {
       .eq('group_id', groupId)
       .eq('user_id', contributionEditTarget.user_id);
 
-    setSavingContribution(false);
     if (error) {
+      setSavingContribution(false);
       setContributionError(error.message);
       return;
     }
+
+    if (alsoStartFreshRound) {
+      const { error: checkpointErr } = await supabase
+      .from('groups')
+      .update({ settled_through: new Date().toISOString() })
+      .eq('id', groupId);
+      if (checkpointErr) {
+        setSavingContribution(false);
+        setContributionError(`Start date saved, but starting a fresh round failed: ${checkpointErr.message}`);
+        return;
+      }
+    }
+
+    setSavingContribution(false);
     setContributionEditTarget(null);
     setContributionCustomDate('');
+    setAlsoStartFreshRound(false);
     load();
   };
 
@@ -636,6 +678,7 @@ export function GroupDashboard() {
                           onClick={() => {
                             setContributionEditTarget(m);
                             setContributionCustomDate(m.contribution_start_date);
+                            setAlsoStartFreshRound(false);
                             setContributionError(null);
                             setShowExpensePicker(false);
                           }}
@@ -708,6 +751,7 @@ export function GroupDashboard() {
                   setContributionCustomDate('');
                   setContributionError(null);
                   setShowExpensePicker(false);
+                  setAlsoStartFreshRound(false);
                 }}
                 className="text-ink-faint hover:text-ink text-xl leading-none"
               >
@@ -759,6 +803,10 @@ export function GroupDashboard() {
                 </div>
               ) : (
                 <div className="space-y-2">
+                  <label className="flex items-start gap-2 text-xs text-ink-soft border border-rule rounded px-3 py-2">
+                  <input type="checkbox" checked={alsoStartFreshRound} onChange={(e) => setAlsoStartFreshRound(e.target.checked)} className="mt-0.5" />
+                  Also start a fresh round from today — every expense added so far will be excluded from the next split.
+                  </label>
                   <button
                     onClick={() => handleUpdateContribution('joined_at')}
                     disabled={savingContribution}
@@ -1013,6 +1061,8 @@ export function GroupDashboard() {
             onTogglePaid={toggleSettlementPaid}
           />
 
+          {checkpointError ? <p className="text-brick text-xs mt-2">{checkpointError}</p> : null}
+          
           {isAdmin && settlements.length > 0 ? (
             <button type="button" onClick={handleStartFreshRound} className="btn-ghost w-full mt-2 text-xs">
               Start a fresh round from today
