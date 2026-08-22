@@ -802,11 +802,11 @@ export function GroupDashboard() {
                   </button>
                 </div>
               ) : (
-          <label className="flex items-start gap-2 text-xs text-ink-soft border border-rule rounded px-3 py-2">
-          <input type="checkbox" checked={alsoStartFreshRound} onChange={(e) => setAlsoStartFreshRound(e.target.checked)} className="mt-0.5" />
-          Also start a fresh round from today — every expense added so far will be excluded from the next split.
-          </label>
                 <div className="space-y-2">
+                  <label className="flex items-start gap-2 text-xs text-ink-soft border border-rule rounded px-3 py-2">
+                  <input type="checkbox" checked={alsoStartFreshRound} onChange={(e) => setAlsoStartFreshRound(e.target.checked)} className="mt-0.5" />
+                  Also start a fresh round from today — every expense added so far will be excluded from the next split.
+                  </label>
                   <button
                     onClick={() => handleUpdateContribution('joined_at')}
                     disabled={savingContribution}
