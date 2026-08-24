@@ -108,6 +108,18 @@ export function GroupDashboard() {
   // needing to discover "Start a fresh round" on their own afterwards.
   const [alsoStartFreshRound, setAlsoStartFreshRound] = useState(false);
 
+  // Toggles the "start fresh round from a specific expense" pick-list —
+  // same shape as showExpensePicker above, but writes settled_through on
+  // the group directly instead of a member's contribution_start_expense_id.
+  const [showFreshRoundPicker, setShowFreshRoundPicker] = useState(false);
+
+  // Surfaced next to the expense list / settle-up list respectively, so a
+  // failed delete() is never silently swallowed — matches checkpointError
+  // above and the same bug class that made settled_through updates
+  // disappear without a trace.
+  const [expenseError, setExpenseError] = useState<string | null>(null);
+  const [settlementError, setSettlementError] = useState<string | null>(null);
+
   const isAdmin = members.find((m) => m.user_id === user?.id)?.role === 'admin';
 
   const load = useCallback(async () => {
@@ -269,7 +281,15 @@ export function GroupDashboard() {
     expenses.find((e) => e.id === m.contribution_start_expense_id)?.description;
 
   const handleDeleteExpense = async (id: string) => {
-    await supabase.from('expenses').delete().eq('id', id);
+    const expense = expenses.find((e) => e.id === id);
+    const ok = window.confirm(`Delete "${expense?.description ?? 'this expense'}"? This can't be undone.`);
+    if (!ok) return;
+    setExpenseError(null);
+    const { error } = await supabase.from('expenses').delete().eq('id', id);
+    if (error) {
+      setExpenseError(error.message);
+      return;
+    }
     load();
   };
 
@@ -297,6 +317,33 @@ export function GroupDashboard() {
       setCheckpointError(error.message);
       return;
     }
+    await load();
+  };
+
+  // Same idea as handleStartFreshRound above, but lets the admin pick the
+  // boundary explicitly instead of always using "now" — the chosen expense
+  // and everything at or before it (by created_at) is what settled_through
+  // excludes; handleComputeSettlement's `.gt('created_at', settled_through)`
+  // does the rest. Useful when "today" isn't actually where the clean
+  // break is — e.g. reconciling after the fact against a specific expense.
+  const handleStartFreshRoundFromExpense = async (expenseId: string) => {
+    if (!groupId) return;
+    const expense = expenses.find((e) => e.id === expenseId);
+    if (!expense) return;
+    const ok = window.confirm(
+      `Start a fresh round from "${expense.description}"? That expense and everything before it will be marked settled and won't be included the next time you split up.`
+    );
+    if (!ok) return;
+    setCheckpointError(null);
+    const { error } = await supabase
+      .from('groups')
+      .update({ settled_through: expense.created_at })
+      .eq('id', groupId);
+    if (error) {
+      setCheckpointError(error.message);
+      return;
+    }
+    setShowFreshRoundPicker(false);
     await load();
   };
 
@@ -355,6 +402,23 @@ export function GroupDashboard() {
 
   const toggleSettlementPaid = async (s: Settlement) => {
     await supabase.from('settlements').update({ is_paid: !s.is_paid }).eq('id', s.id);
+    load();
+  };
+
+  // Admin-only per settlements_delete_admin (migration 0002) — for
+  // removing a stray/incorrect computed transfer without having to
+  // re-split the whole group to get rid of it.
+  const handleDeleteSettlement = async (s: Settlement) => {
+    const ok = window.confirm(
+      `Delete this settlement record (@${s.from_profile?.username ?? 'someone'} → @${s.to_profile?.username ?? 'someone'})? This can't be undone.`
+    );
+    if (!ok) return;
+    setSettlementError(null);
+    const { error } = await supabase.from('settlements').delete().eq('id', s.id);
+    if (error) {
+      setSettlementError(error.message);
+      return;
+    }
     load();
   };
 
@@ -851,6 +915,49 @@ export function GroupDashboard() {
         </div>
       ) : null}
 
+      {showFreshRoundPicker ? (
+        <div className="fixed inset-0 bg-ink/40 flex items-end sm:items-center justify-center z-20 p-0 sm:p-4">
+          <div className="bg-paper w-full sm:max-w-sm sm:rounded-lg rounded-t-2xl overflow-y-auto">
+            <div className="p-5 border-b border-rule flex items-center justify-between">
+              <h2 className="font-mono font-semibold">Start fresh round from…</h2>
+              <button
+                onClick={() => setShowFreshRoundPicker(false)}
+                className="text-ink-faint hover:text-ink text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-ink-soft">
+                Pick an expense — it and everything before it will be marked settled, and only later expenses
+                will count in the next split.
+              </p>
+              {checkpointError ? <p className="text-brick text-sm">{checkpointError}</p> : null}
+              {expenses.length === 0 ? (
+                <p className="text-sm text-ink-soft">No expenses logged yet.</p>
+              ) : (
+                <ul className="space-y-1 max-h-64 overflow-y-auto -mx-1 px-1">
+                  {expenses.map((e) => (
+                    <li key={e.id}>
+                      <button
+                        type="button"
+                        onClick={() => handleStartFreshRoundFromExpense(e.id)}
+                        className="w-full text-left rounded px-2 py-2 hover:bg-ink/5 transition-colors"
+                      >
+                        <span className="text-sm text-ink-soft block truncate">{e.description}</span>
+                        <span className="text-[11px] text-ink-faint">
+                          {formatDate(e.created_at)} · {formatCurrency(e.amount, currency)}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {expandedPanel === 'passkey' && isAdmin ? (
         <div className="receipt-card px-3 py-2 mb-5">
           <div className="flex items-center justify-between gap-2">
@@ -965,6 +1072,7 @@ export function GroupDashboard() {
           <button className="btn-primary w-full mb-4" onClick={() => setShowAdd(true)}>
             + Add expense
           </button>
+          {expenseError ? <p className="text-brick text-xs mb-3">{expenseError}</p> : null}
           {expenses.length === 0 ? (
             <div className="receipt-card p-8 text-center">
               <p className="text-sm text-ink-soft">No expenses logged yet.</p>
@@ -1050,24 +1158,38 @@ export function GroupDashboard() {
             </div>
           ) : null}
 
-          <button onClick={handleComputeSettlement} disabled={computing} className="btn-primary w-full">
-            {computing ? 'Splitting…' : settlements.length > 0 ? 'Re-split' : 'Split up'}
-          </button>
+          <div className={isAdmin ? 'flex gap-2' : ''}>
+            <button onClick={handleComputeSettlement} disabled={computing} className="btn-primary flex-1">
+              {computing ? 'Splitting…' : settlements.length > 0 ? 'Re-split' : 'Split up'}
+            </button>
+            {isAdmin ? (
+              <button type="button" onClick={handleStartFreshRound} className="btn-ghost flex-1 text-xs">
+                Start a fresh round from today
+              </button>
+            ) : null}
+          </div>
+
+          {isAdmin ? (
+            <button
+              type="button"
+              onClick={() => setShowFreshRoundPicker(true)}
+              className="text-xs text-ink-faint hover:text-emerald underline mt-1"
+            >
+              Or start from a specific expense…
+            </button>
+          ) : null}
 
           <SettlementSummary
             settlements={settlements}
             currency={currency}
             canMarkPaid={(s) => s.from_user === user?.id || s.to_user === user?.id || isAdmin}
             onTogglePaid={toggleSettlementPaid}
+            canDelete={isAdmin}
+            onDelete={handleDeleteSettlement}
           />
 
           {checkpointError ? <p className="text-brick text-xs mt-2">{checkpointError}</p> : null}
-          
-          {isAdmin && settlements.length > 0 ? (
-            <button type="button" onClick={handleStartFreshRound} className="btn-ghost w-full mt-2 text-xs">
-              Start a fresh round from today
-            </button>
-          ) : null}
+          {settlementError ? <p className="text-brick text-xs mt-2">{settlementError}</p> : null}
         </div>
       )}
 

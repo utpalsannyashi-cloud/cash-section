@@ -6,12 +6,19 @@ export function SettlementSummary({
   settlements,
   currency,
   canMarkPaid,
-  onTogglePaid
+  onTogglePaid,
+  canDelete,
+  onDelete
 }: {
   settlements: Settlement[];
   currency: string;
   canMarkPaid: (s: Settlement) => boolean;
   onTogglePaid: (s: Settlement) => void;
+  // Both optional so existing callers (e.g. SessionDetail's legacy view)
+  // that don't wire up deletion keep compiling unchanged — matches
+  // settlements_delete_admin in migration 0002 (admin-only).
+  canDelete?: boolean;
+  onDelete?: (s: Settlement) => void;
 }) {
   if (settlements.length === 0) {
     return (
@@ -74,6 +81,11 @@ export function SettlementSummary({
                 {s.is_paid ? 'Paid' : 'Pending'}
               </span>
             )}
+            {canDelete && onDelete ? (
+              <button onClick={() => onDelete(s)} className="text-xs text-ink-faint hover:text-brick shrink-0">
+                Delete
+              </button>
+            ) : null}
           </li>
         ))}
       </ul>
