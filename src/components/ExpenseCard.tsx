@@ -7,12 +7,18 @@ export function ExpenseCard({
   expense,
   currency,
   canManage,
+  // True once this expense is at or before the group's settled_through
+  // checkpoint (see GroupDashboard's "Start a fresh round") — struck
+  // through so it reads as already cleared, the same visual language
+  // SettlementSummary already uses for a paid transfer.
+  settled = false,
   onEdit,
   onDelete
 }: {
   expense: Expense;
   currency: string;
   canManage: boolean;
+  settled?: boolean;
   onEdit: (expense: Expense) => void;
   onDelete: (id: string) => void;
 }) {
@@ -41,8 +47,14 @@ export function ExpenseCard({
       </span>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-sm font-medium truncate">{expense.description}</span>
-          <span className="font-mono text-sm font-semibold tabular-nums shrink-0">
+          <span className={`text-sm font-medium truncate ${settled ? 'line-through text-ink-faint' : ''}`}>
+            {expense.description}
+          </span>
+          <span
+            className={`font-mono text-sm font-semibold tabular-nums shrink-0 ${
+              settled ? 'line-through text-ink-faint' : ''
+            }`}
+          >
             {formatCurrency(expense.amount, currency)}
           </span>
         </div>
