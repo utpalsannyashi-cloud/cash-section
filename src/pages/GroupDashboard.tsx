@@ -315,6 +315,23 @@ export function GroupDashboard() {
     });
   };
 
+  // Purely cosmetic strike-through, independent of the settled_through
+  // checkpoint below — see migration 0025. No confirm dialog: it's
+  // reversible with one more click, same as toggleSettlementPaid.
+  const handleToggleExpenseSettled = async (expense: Expense) => {
+    setExpenseError(null);
+    const next = !expense.marked_settled;
+    const { error } = await supabase
+      .from('expenses')
+      .update({ marked_settled: next, settled_at: next ? new Date().toISOString() : null })
+      .eq('id', expense.id);
+    if (error) {
+      setExpenseError(error.message);
+      return;
+    }
+    load();
+  };
+
   const handleEditExpense = (expense: Expense) => {
     setEditingExpense(expense);
   };
@@ -1130,8 +1147,10 @@ export function GroupDashboard() {
                     currency={currency}
                     canManage={isAdmin || e.created_by === user?.id}
                     settled={group?.settled_through ? new Date(e.created_at) <= new Date(group.settled_through) : false}
+                    manuallySettled={e.marked_settled}
                     onEdit={handleEditExpense}
                     onDelete={handleDeleteExpense}
+                    onToggleSettled={handleToggleExpenseSettled}
                   />
                 </li>
               ))}
