@@ -71,6 +71,12 @@ export interface Expense {
   attachment_path: string | null;
   created_by: string;
   created_at: string;
+  // Manual per-expense strike-through, toggled via the "Settled" action
+  // next to Edit/Delete — independent of the group-wide settled_through
+  // checkpoint. Purely cosmetic; never affects settlement computation.
+  // See migration 0025.
+  marked_settled: boolean;
+  settled_at: string | null;
   payer?: Profile;
   splits?: ExpenseSplit[];
 }
