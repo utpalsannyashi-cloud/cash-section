@@ -12,16 +12,29 @@ export function ExpenseCard({
   // through so it reads as already cleared, the same visual language
   // SettlementSummary already uses for a paid transfer.
   settled = false,
+  // Independent of the checkpoint above: a member with canManage can
+  // strike this specific expense through by hand via the "Settled"
+  // action next to Edit/Delete, regardless of where the group-wide
+  // checkpoint currently sits. Purely a visual note — see migration
+  // 0025, it never affects what gets included in the next split.
+  manuallySettled = false,
   onEdit,
-  onDelete
+  onDelete,
+  // Optional so SessionDetail's legacy expense list (which doesn't wire
+  // this up) keeps compiling unchanged — same pattern as canDelete/onDelete
+  // on SettlementSummary.
+  onToggleSettled
 }: {
   expense: Expense;
   currency: string;
   canManage: boolean;
   settled?: boolean;
+  manuallySettled?: boolean;
   onEdit: (expense: Expense) => void;
   onDelete: (id: string) => void;
+  onToggleSettled?: (expense: Expense) => void;
 }) {
+  const struckThrough = settled || manuallySettled;
   const [billUrl, setBillUrl] = useState<string | null>(null);
   const [loadingBill, setLoadingBill] = useState(false);
 
@@ -47,12 +60,12 @@ export function ExpenseCard({
       </span>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <span className={`text-sm font-medium truncate ${settled ? 'line-through text-ink-faint' : ''}`}>
+          <span className={`text-sm font-medium truncate ${struckThrough ? 'line-through text-ink-faint' : ''}`}>
             {expense.description}
           </span>
           <span
             className={`font-mono text-sm font-semibold tabular-nums shrink-0 ${
-              settled ? 'line-through text-ink-faint' : ''
+              struckThrough ? 'line-through text-ink-faint' : ''
             }`}
           >
             {formatCurrency(expense.amount, currency)}
@@ -67,6 +80,21 @@ export function ExpenseCard({
             {expense.attachment_path ? (
               <button onClick={viewBill} disabled={loadingBill} className="text-xs text-emerald hover:underline">
                 {loadingBill ? 'Opening…' : 'View bill'}
+              </button>
+            ) : null}
+            {canManage && onToggleSettled ? (
+              <button
+                onClick={() => onToggleSettled(expense)}
+                title={
+                  manuallySettled
+                    ? 'Not actually cleared — this just un-strikes it in the list'
+                    : "Strike this through in the list — doesn't change how it's split"
+                }
+                className={`text-xs ${
+                  manuallySettled ? 'text-emerald-dark hover:text-ink-faint' : 'text-ink-faint hover:text-emerald'
+                }`}
+              >
+                {manuallySettled ? 'Unsettle' : 'Settled'}
               </button>
             ) : null}
             {canManage ? (
