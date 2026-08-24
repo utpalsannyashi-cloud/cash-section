@@ -183,7 +183,7 @@ export function GroupDashboard() {
           .from('settlements')
           .select('*, from_profile:profiles!settlements_from_user_fkey(*), to_profile:profiles!settlements_to_user_fkey(*)')
           .in('session_id', ids)
-          .order('amount', { ascending: false })
+          .order('created_at', { ascending: false })
       ]);
       setExpenses((exp as unknown as Expense[]) ?? []);
       setSettlements((settl as unknown as Settlement[]) ?? []);
@@ -1129,6 +1129,7 @@ export function GroupDashboard() {
                     expense={e}
                     currency={currency}
                     canManage={isAdmin || e.created_by === user?.id}
+                    settled={group?.settled_through ? new Date(e.created_at) <= new Date(group.settled_through) : false}
                     onEdit={handleEditExpense}
                     onDelete={handleDeleteExpense}
                   />
