@@ -5,6 +5,7 @@ import { AddExpenseModal, ParticipantLike } from '@/components/AddExpenseModal';
 import { ExpenseCard } from '@/components/ExpenseCard';
 import { SettlementSummary } from '@/components/SettlementSummary';
 import { JoinRequestsPanel } from '@/components/JoinRequestsPanel';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { deriveTotals, findDepartedCredits, simplifyDebts } from '@/utils/settlement';
@@ -119,6 +120,20 @@ export function GroupDashboard() {
   // disappear without a trace.
   const [expenseError, setExpenseError] = useState<string | null>(null);
   const [settlementError, setSettlementError] = useState<string | null>(null);
+
+  // Replaces window.confirm() for every destructive/one-way action on this
+  // page (delete expense, delete settlement, start/reset a fresh round) —
+  // the native dialog can't be styled, so it looked jarringly out of place
+  // next to the rest of the themed UI. One slot is enough since only one
+  // confirmation is ever open at a time; each call site fills in its own
+  // copy and the action to run if the admin confirms.
+  const [confirmDialog, setConfirmDialog] = useState<{
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    tone?: 'danger' | 'primary';
+    onConfirm: () => void;
+  } | null>(null);
 
   const isAdmin = members.find((m) => m.user_id === user?.id)?.role === 'admin';
 
@@ -280,17 +295,24 @@ export function GroupDashboard() {
   const contributionStartExpenseLabel = (m: GroupMember): string | undefined =>
     expenses.find((e) => e.id === m.contribution_start_expense_id)?.description;
 
-  const handleDeleteExpense = async (id: string) => {
+  const handleDeleteExpense = (id: string) => {
     const expense = expenses.find((e) => e.id === id);
-    const ok = window.confirm(`Delete "${expense?.description ?? 'this expense'}"? This can't be undone.`);
-    if (!ok) return;
-    setExpenseError(null);
-    const { error } = await supabase.from('expenses').delete().eq('id', id);
-    if (error) {
-      setExpenseError(error.message);
-      return;
-    }
-    load();
+    setConfirmDialog({
+      title: 'Delete expense?',
+      message: `Delete "${expense?.description ?? 'this expense'}"? This can't be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        setExpenseError(null);
+        const { error } = await supabase.from('expenses').delete().eq('id', id);
+        if (error) {
+          setExpenseError(error.message);
+          return;
+        }
+        load();
+      }
+    });
   };
 
   const handleEditExpense = (expense: Expense) => {
@@ -302,22 +324,27 @@ export function GroupDashboard() {
     setEditingExpense(null);
   };
 
-  const handleStartFreshRound = async () => {
+  const handleStartFreshRound = () => {
     if (!groupId) return;
-    const ok = window.confirm(
-      "Start a fresh round? Expenses added so far will be marked settled and won't be included the next time you split up."
-    );
-    if (!ok) return;
-    setCheckpointError(null);
-    const { error } = await supabase
-      .from('groups')
-      .update({ settled_through: new Date().toISOString() })
-      .eq('id', groupId);
-    if (error) {
-      setCheckpointError(error.message);
-      return;
-    }
-    await load();
+    setConfirmDialog({
+      title: 'Start a fresh round?',
+      message: "Expenses added so far will be marked settled and won't be included the next time you split up.",
+      confirmLabel: 'Start fresh round',
+      tone: 'primary',
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        setCheckpointError(null);
+        const { error } = await supabase
+          .from('groups')
+          .update({ settled_through: new Date().toISOString() })
+          .eq('id', groupId);
+        if (error) {
+          setCheckpointError(error.message);
+          return;
+        }
+        await load();
+      }
+    });
   };
 
   // Same idea as handleStartFreshRound above, but lets the admin pick the
@@ -326,38 +353,50 @@ export function GroupDashboard() {
   // excludes; handleComputeSettlement's `.gt('created_at', settled_through)`
   // does the rest. Useful when "today" isn't actually where the clean
   // break is — e.g. reconciling after the fact against a specific expense.
-  const handleStartFreshRoundFromExpense = async (expenseId: string) => {
+  const handleStartFreshRoundFromExpense = (expenseId: string) => {
     if (!groupId) return;
     const expense = expenses.find((e) => e.id === expenseId);
     if (!expense) return;
-    const ok = window.confirm(
-      `Start a fresh round from "${expense.description}"? That expense and everything before it will be marked settled and won't be included the next time you split up.`
-    );
-    if (!ok) return;
-    setCheckpointError(null);
-    const { error } = await supabase
-      .from('groups')
-      .update({ settled_through: expense.created_at })
-      .eq('id', groupId);
-    if (error) {
-      setCheckpointError(error.message);
-      return;
-    }
-    setShowFreshRoundPicker(false);
-    await load();
+    setConfirmDialog({
+      title: 'Start a fresh round?',
+      message: `Start a fresh round from "${expense.description}"? That expense and everything before it will be marked settled and won't be included the next time you split up.`,
+      confirmLabel: 'Start fresh round',
+      tone: 'primary',
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        setCheckpointError(null);
+        const { error } = await supabase
+          .from('groups')
+          .update({ settled_through: expense.created_at })
+          .eq('id', groupId);
+        if (error) {
+          setCheckpointError(error.message);
+          return;
+        }
+        setShowFreshRoundPicker(false);
+        await load();
+      }
+    });
   };
 
-  const handleResetSettlementCheckpoint = async () => {
+  const handleResetSettlementCheckpoint = () => {
     if (!groupId) return;
-    const ok = window.confirm('Include every expense in the next split again?');
-    if (!ok) return;
-    setCheckpointError(null);
-    const { error } = await supabase.from('groups').update({ settled_through: null }).eq('id', groupId);
-    if (error) {
-      setCheckpointError(error.message);
-      return;
-    }
-    await load();
+    setConfirmDialog({
+      title: 'Reset checkpoint?',
+      message: 'Include every expense in the next split again?',
+      confirmLabel: 'Reset',
+      tone: 'primary',
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        setCheckpointError(null);
+        const { error } = await supabase.from('groups').update({ settled_through: null }).eq('id', groupId);
+        if (error) {
+          setCheckpointError(error.message);
+          return;
+        }
+        await load();
+      }
+    });
   };
 
   const handleComputeSettlement = async () => {
@@ -408,18 +447,23 @@ export function GroupDashboard() {
   // Admin-only per settlements_delete_admin (migration 0002) — for
   // removing a stray/incorrect computed transfer without having to
   // re-split the whole group to get rid of it.
-  const handleDeleteSettlement = async (s: Settlement) => {
-    const ok = window.confirm(
-      `Delete this settlement record (@${s.from_profile?.username ?? 'someone'} → @${s.to_profile?.username ?? 'someone'})? This can't be undone.`
-    );
-    if (!ok) return;
-    setSettlementError(null);
-    const { error } = await supabase.from('settlements').delete().eq('id', s.id);
-    if (error) {
-      setSettlementError(error.message);
-      return;
-    }
-    load();
+  const handleDeleteSettlement = (s: Settlement) => {
+    setConfirmDialog({
+      title: 'Delete settlement record?',
+      message: `Delete this settlement record (@${s.from_profile?.username ?? 'someone'} → @${s.to_profile?.username ?? 'someone'})? This can't be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        setSettlementError(null);
+        const { error } = await supabase.from('settlements').delete().eq('id', s.id);
+        if (error) {
+          setSettlementError(error.message);
+          return;
+        }
+        load();
+      }
+    });
   };
 
   // Currency lives on the sessions, not per-expense — picking a new one on
@@ -1163,7 +1207,7 @@ export function GroupDashboard() {
               {computing ? 'Splitting…' : settlements.length > 0 ? 'Re-split' : 'Split up'}
             </button>
             {isAdmin ? (
-              <button type="button" onClick={handleStartFreshRound} className="btn-ghost flex-1 text-xs">
+              <button type="button" onClick={handleStartFreshRound} className="btn-secondary flex-1">
                 Start a fresh round from today
               </button>
             ) : null}
@@ -1210,6 +1254,16 @@ export function GroupDashboard() {
           }}
         />
       ) : null}
+
+      <ConfirmDialog
+        open={confirmDialog !== null}
+        title={confirmDialog?.title ?? ''}
+        message={confirmDialog?.message ?? ''}
+        confirmLabel={confirmDialog?.confirmLabel}
+        tone={confirmDialog?.tone}
+        onConfirm={() => confirmDialog?.onConfirm()}
+        onCancel={() => setConfirmDialog(null)}
+      />
     </Layout>
   );
 }
