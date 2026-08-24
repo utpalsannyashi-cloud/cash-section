@@ -10,7 +10,17 @@ import type { AdminPartner, Group, PartnerRequest } from '@/types';
 
 type GroupWithRole = Group & { role: 'admin' | 'member'; member_count: number };
 type Filter = 'all' | 'admin' | 'member';
-type ExpenseOverview = { id: string; description: string; amount: number; group_id: string; group_name: string; created_at: string };
+type ExpenseOverview = {
+  id: string;
+  description: string;
+  amount: number;
+  group_id: string;
+  group_name: string;
+  created_at: string;
+  // Needed (alongside the owning group's settled_through) to compute
+  // whether every expense in a group is settled — see isExpenseSettled.
+  marked_settled: boolean;
+};
 
 const CODE_PATTERN = /^[a-z0-9]{6,20}$/;
 
@@ -35,9 +45,6 @@ export function Groups() {
   // ends in "waiting on the admin" rather than the group appearing.
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // Which group row's settled toggle is mid-request, so only that one
-  // button shows a busy state instead of the whole list.
-  const [settledBusyId, setSettledBusyId] = useState<string | null>(null);
 
   // Long-press action sheet (admin-owned groups only): rename, change
   // passkey, add a partner, or delete — without leaving the groups list.
@@ -118,8 +125,12 @@ export function Groups() {
       // Expenses hang off a session row internally, but that's no longer a
       // user-facing concept — so pull every session under these groups just
       // to map expenses back to a group id/name for the overview below.
-      // (Settled state no longer needs a settlements query here — it's
-      // just the marked_settled column already fetched with the group.)
+      // Also doubles as the source of truth for the "Settled up" pill below
+      // (fullySettledGroupIds) — each expense's marked_settled plus its
+      // owning group's settled_through is exactly what ExpenseCard uses to
+      // decide whether that expense is struck through in the group's own
+      // Expenses section, so recomputing the same check here keeps the two
+      // views honest with each other.
       const { data: sessions } = await supabase
         .from('sessions')
         .select('id, group_id')
@@ -130,7 +141,7 @@ export function Groups() {
       if (sessionIds.length > 0) {
         const { data: exp } = await supabase
           .from('expenses')
-          .select('id, description, amount, created_at, session_id')
+          .select('id, description, amount, created_at, session_id, marked_settled')
           .in('session_id', sessionIds)
           .order('created_at', { ascending: false });
 
@@ -142,7 +153,8 @@ export function Groups() {
             amount: Number(e.amount),
             created_at: e.created_at,
             group_id: gid,
-            group_name: withCounts.find((g) => g.id === gid)?.name ?? ''
+            group_name: withCounts.find((g) => g.id === gid)?.name ?? '',
+            marked_settled: e.marked_settled
           };
         }) as ExpenseOverview[];
 
@@ -161,28 +173,6 @@ export function Groups() {
     }
 
     setLoading(false);
-  };
-
-  // Reversible, admin-only: flips whether this group counts as settled
-  // up on the list, independent of what the group's own Settle Up tab
-  // computes from settlement rows. Same RLS path as rename/passkey
-  // changes below (groups_update_admin), so no RPC is needed.
-  const handleToggleSettled = async (g: GroupWithRole) => {
-    setSettledBusyId(g.id);
-    const next = !g.marked_settled;
-    const nextSettledAt = next ? new Date().toISOString() : null;
-    const { error: updateError } = await supabase
-      .from('groups')
-      .update({ marked_settled: next, settled_at: nextSettledAt })
-      .eq('id', g.id);
-    setSettledBusyId(null);
-    if (updateError) {
-      setError(updateError.message);
-      return;
-    }
-    setGroups((prev) =>
-      prev.map((row) => (row.id === g.id ? { ...row, marked_settled: next, settled_at: nextSettledAt } : row))
-    );
   };
 
   // Accepted partnerships (for the create-group picker) and pending
@@ -209,6 +199,31 @@ export function Groups() {
 
   const adminCount = groups.filter((g) => g.role === 'admin').length;
   const memberCount = groups.filter((g) => g.role === 'member').length;
+
+  // Mirrors ExpenseCard's struckThrough logic exactly (settled_through
+  // checkpoint OR the per-expense manual toggle from migration 0025) so
+  // this list's "Settled up" pill can never disagree with what a group's
+  // own Expenses section actually shows struck through.
+  const isExpenseSettled = (e: ExpenseOverview, g: GroupWithRole) => {
+    const pastCheckpoint = g.settled_through ? new Date(e.created_at) <= new Date(g.settled_through) : false;
+    return pastCheckpoint || e.marked_settled;
+  };
+
+  // A group only counts as settled up once every expense in it is
+  // individually settled — an empty group has nothing to claim is
+  // settled, so it gets no pill either way, and a single pending
+  // expense is enough to withhold it from the rest.
+  const fullySettledGroupIds = useMemo(() => {
+    const ids = new Set<string>();
+    groups.forEach((g) => {
+      const groupExpenses = expensesOverview.filter((e) => e.group_id === g.id);
+      if (groupExpenses.length > 0 && groupExpenses.every((e) => isExpenseSettled(e, g))) {
+        ids.add(g.id);
+      }
+    });
+    return ids;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups, expensesOverview]);
 
   const visibleGroups = useMemo(() => {
     return groups.filter((g) => {
@@ -798,33 +813,10 @@ export function Groups() {
                   </p>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
-                  {g.role === 'admin' ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleToggleSettled(g);
-                      }}
-                      disabled={settledBusyId === g.id}
-                      title={
-                        g.marked_settled
-                          ? 'Mark this group as not settled'
-                          : 'Mark every expense in this group as settled up'
-                      }
-                      className={`status-pill flex items-center gap-1 transition-colors ${
-                        g.marked_settled
-                          ? 'bg-emerald-light text-emerald-dark hover:bg-emerald-light/70'
-                          : 'bg-ink/5 text-ink-faint hover:bg-ink/10'
-                      }`}
-                    >
-                      {g.marked_settled ? <Icon name="check" size={12} /> : null}
-                      {settledBusyId === g.id ? '…' : g.marked_settled ? 'Settled up' : 'Mark settled'}
-                    </button>
-                  ) : g.marked_settled ? (
+                  {fullySettledGroupIds.has(g.id) ? (
                     <span
                       className="status-pill bg-emerald-light text-emerald-dark flex items-center gap-1"
-                      title="The admin has marked every expense in this group as settled up"
+                      title="Every expense in this group is settled up — nothing pending"
                     >
                       <Icon name="check" size={12} />
                       Settled up
