@@ -365,18 +365,25 @@ export function GroupDashboard() {
   };
 
   // Same idea as handleStartFreshRound above, but lets the admin pick the
-  // boundary explicitly instead of always using "now" — the chosen expense
-  // and everything at or before it (by created_at) is what settled_through
-  // excludes; handleComputeSettlement's `.gt('created_at', settled_through)`
-  // does the rest. Useful when "today" isn't actually where the clean
-  // break is — e.g. reconciling after the fact against a specific expense.
+  // boundary explicitly instead of always using "now". The clicked expense
+  // ITSELF should count in the next split (not be excluded) — only the
+  // expenses strictly before it are marked settled. `expenses` is ordered
+  // newest-first, so the array entry right after the clicked one is the
+  // next-older expense; its created_at becomes the new (exclusive)
+  // settled_through checkpoint. handleComputeSettlement's
+  // `.gt('created_at', settled_through)` does the rest. If the clicked
+  // expense is the oldest one, there's nothing to exclude, so the
+  // checkpoint is cleared entirely (null) and every expense counts.
   const handleStartFreshRoundFromExpense = (expenseId: string) => {
     if (!groupId) return;
-    const expense = expenses.find((e) => e.id === expenseId);
-    if (!expense) return;
+    const index = expenses.findIndex((e) => e.id === expenseId);
+    if (index === -1) return;
+    const expense = expenses[index];
+    const previousExpense = expenses[index + 1];
+    const newCheckpoint = previousExpense ? previousExpense.created_at : null;
     setConfirmDialog({
       title: 'Start a fresh round?',
-      message: `Start a fresh round from "${expense.description}"? That expense and everything before it will be marked settled and won't be included the next time you split up.`,
+      message: `Start a fresh round from "${expense.description}"? Everything before it will be marked settled, and "${expense.description}" onward will count in the next split up.`,
       confirmLabel: 'Start fresh round',
       tone: 'primary',
       onConfirm: async () => {
@@ -384,7 +391,7 @@ export function GroupDashboard() {
         setCheckpointError(null);
         const { error } = await supabase
           .from('groups')
-          .update({ settled_through: expense.created_at })
+          .update({ settled_through: newCheckpoint })
           .eq('id', groupId);
         if (error) {
           setCheckpointError(error.message);
