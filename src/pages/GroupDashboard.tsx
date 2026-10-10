@@ -351,15 +351,18 @@ export function GroupDashboard() {
       onConfirm: async () => {
         setConfirmDialog(null);
         setCheckpointError(null);
+        const newCheckpoint = new Date().toISOString();
         const { error } = await supabase
           .from('groups')
-          .update({ settled_through: new Date().toISOString() })
+          .update({ settled_through: newCheckpoint })
           .eq('id', groupId);
         if (error) {
           setCheckpointError(error.message);
           return;
         }
         await load();
+        // Auto-recompute so the new cutoff takes effect immediately
+        await handleComputeSettlement(newCheckpoint);
       }
     });
   };
@@ -399,6 +402,8 @@ export function GroupDashboard() {
         }
         setShowFreshRoundPicker(false);
         await load();
+        // Auto-recompute so the new cutoff takes effect immediately
+        await handleComputeSettlement(newCheckpoint);
       }
     });
   };
@@ -423,13 +428,14 @@ export function GroupDashboard() {
     });
   };
 
-  const handleComputeSettlement = async () => {
+  const handleComputeSettlement = async (overrideCutoff?: string | null) => {
     if (sessionIds.length === 0) return;
     setComputing(true);
 
+    const cutoff = overrideCutoff !== undefined ? overrideCutoff : group?.settled_through;
     let expensesQuery = supabase.from('expenses').select('id, paid_by, amount').in('session_id', sessionIds);
-    if (group?.settled_through) {
-      expensesQuery = expensesQuery.gt('created_at', group.settled_through);
+    if (cutoff) {
+      expensesQuery = expensesQuery.gt('created_at', cutoff);
     }
     const { data: allExpenses } = await expensesQuery;
     const settleableIds = (allExpenses ?? []).map((e: any) => e.id);
@@ -997,8 +1003,8 @@ export function GroupDashboard() {
             </div>
             <div className="p-5 space-y-4">
               <p className="text-sm text-ink-soft">
-                Pick an expense — it and everything before it will be marked settled, and only later expenses
-                will count in the next split.
+                Pick an expense — it and everything after it will count in the next split.
+                Everything before it will be marked settled and excluded.
               </p>
               {checkpointError ? <p className="text-brick text-sm">{checkpointError}</p> : null}
               {expenses.length === 0 ? (
