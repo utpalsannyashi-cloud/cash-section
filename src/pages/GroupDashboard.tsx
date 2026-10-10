@@ -469,5 +469,834 @@ export function GroupDashboard() {
     load();
   };
 
-  // ... rest of the file continues with the corrected picker text and other unchanged code
+  const toggleSettlementPaid = async (s: Settlement) => {
+    await supabase.from('settlements').update({ is_paid: !s.is_paid }).eq('id', s.id);
+    load();
+  };
+
+  // Admin-only per settlements_delete_admin (migration 0002) — for
+  // removing a stray/incorrect computed transfer without having to
+  // re-split the whole group to get rid of it.
+  const handleDeleteSettlement = (s: Settlement) => {
+    setConfirmDialog({
+      title: 'Delete settlement record?',
+      message: `Delete this settlement record (@${s.from_profile?.username ?? 'someone'} → @${s.to_profile?.username ?? 'someone'})? This can't be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+      onConfirm: async () => {
+        setConfirmDialog(null);
+        setSettlementError(null);
+        const { error } = await supabase.from('settlements').delete().eq('id', s.id);
+        if (error) {
+          setSettlementError(error.message);
+          return;
+        }
+        load();
+      }
+    });
+  };
+
+  // Currency lives on the sessions, not per-expense — picking a new one on
+  // the add-expense form just relabels the whole group going forward.
+  const handleCurrencyChange = async (newCurrency: string) => {
+    if (sessionIds.length === 0) return;
+    await supabase.from('sessions').update({ currency: newCurrency }).in('id', sessionIds);
+    setCurrency(newCurrency);
+  };
+
+  const copyAccessCode = async () => {
+    if (!group) return;
+    await navigator.clipboard.writeText(group.access_code);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 1500);
+  };
+
+  const regenerateAccessCode = async () => {
+    if (!groupId) return;
+    setRegenerating(true);
+    setCodeError(null);
+    const newCode = Math.random().toString(36).slice(2, 8);
+    await supabase.from('groups').update({ access_code: newCode }).eq('id', groupId);
+    setRegenerating(false);
+    load();
+  };
+
+  const handleSetCustomCode = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!groupId) return;
+    const code = customCode.trim().toLowerCase();
+    if (!CODE_PATTERN.test(code)) {
+      setCodeError('Use 6–20 lowercase letters/numbers, e.g. goa2026.');
+      return;
+    }
+    setSavingCode(true);
+    setCodeError(null);
+    const { error } = await supabase.from('groups').update({ access_code: code }).eq('id', groupId);
+    setSavingCode(false);
+    if (error) {
+      setCodeError(error.message.includes('duplicate') ? 'That passkey is already taken — pick another.' : error.message);
+      return;
+    }
+    setCustomCode('');
+    load();
+  };
+
+  const handleRemoveMember = async () => {
+    if (!removeMemberTarget || !groupId) return;
+    setRemovingMember(true);
+    setRemoveMemberError(null);
+    const { error } = await supabase
+      .from('group_members')
+      .delete()
+      .eq('group_id', groupId)
+      .eq('user_id', removeMemberTarget.user_id);
+    setRemovingMember(false);
+    if (error) {
+      setRemoveMemberError(error.message);
+      return;
+    }
+    setRemoveMemberTarget(null);
+    load();
+  };
+
+  // Updates which preset drives a member's contribution start. For
+  // 'joined_at' and 'group_creation' we deliberately don't send a date —
+  // the trg_check_contribution_start trigger derives contribution_start_date
+  // server-side from joined_at / the group's created_at, so there's no risk
+  // of the client and DB disagreeing. Only 'custom' sends an explicit date,
+  // and the trigger accepts it as-is, with no floor at the group's creation date — so it can predate the group, matching a real expense from before this group existed here.
+  const handleUpdateContribution = async (source: ContributionSource) => {
+    if (!contributionEditTarget || !groupId) return;
+    if (source === 'custom' && !contributionCustomDate) {
+      setContributionError('Pick a date.');
+      return;
+    }
+    setSavingContribution(true);
+    setContributionError(null);
+
+    const update: { contribution_start_source: ContributionSource; contribution_start_date?: string } = {
+      contribution_start_source: source
+    };
+    if (source === 'custom') {
+      update.contribution_start_date = contributionCustomDate;
+    }
+
+    const { error } = await supabase
+      .from('group_members')
+      .update(update)
+      .eq('group_id', groupId)
+      .eq('user_id', contributionEditTarget.user_id);
+
+    if (error) {
+      setSavingContribution(false);
+      setContributionError(error.message);
+      return;
+    }
+
+    if (alsoStartFreshRound) {
+      const { error: checkpointErr } = await supabase
+      .from('groups')
+      .update({ settled_through: new Date().toISOString() })
+      .eq('id', groupId);
+      if (checkpointErr) {
+        setSavingContribution(false);
+        setContributionError(`Start date saved, but starting a fresh round failed: ${checkpointErr.message}`);
+        return;
+      }
+    }
+
+    setSavingContribution(false);
+    setContributionEditTarget(null);
+    setContributionCustomDate('');
+    setAlsoStartFreshRound(false);
+    load();
+  };
+
+  // Unlike handleUpdateContribution above, this one rewrites history: the
+  // RPC recomputes the equal split on the chosen expense and every expense
+  // on or after it (across the whole group) to include this member,
+  // shrinking everyone else's share so the totals still add up — see
+  // migration 0015 for why date-only granularity can't express "starting
+  // from this one, not that one" when several expenses share a date.
+  const handleSetContributionFromExpense = async (expenseId: string) => {
+    if (!contributionEditTarget || !groupId) return;
+    setSavingContribution(true);
+    setContributionError(null);
+
+    const { error } = await supabase.rpc('set_member_contribution_from_expense', {
+      p_group_id: groupId,
+      p_user_id: contributionEditTarget.user_id,
+      p_expense_id: expenseId
+    });
+
+    setSavingContribution(false);
+    if (error) {
+      setContributionError(error.message);
+      return;
+    }
+    setContributionEditTarget(null);
+    setContributionCustomDate('');
+    setShowExpensePicker(false);
+    load();
+  };
+
+  const handleDeleteGroup = async () => {
+    if (!groupId || !group) return;
+    setDeletingGroup(true);
+    const { error } = await supabase.from('groups').delete().eq('id', groupId);
+    setDeletingGroup(false);
+    if (error) {
+      setDeleteError(error.message);
+      return;
+    }
+    navigate('/groups', { replace: true });
+  };
+
+  if (loading) {
+    return (
+      <Layout back="/groups">
+        <p className="label-eyebrow">Loading…</p>
+      </Layout>
+    );
+  }
+
+  if (!group) {
+    return (
+      <Layout back="/groups">
+        <p className="text-ink-soft text-sm">Group not found, or you don't have access to it.</p>
+      </Layout>
+    );
+  }
+
+  return (
+    <Layout back="/groups" onAskAi={() => navigate(`/groups/${groupId}/insights`)}>
+      <div className="mb-5">
+        <h1 className="font-mono text-xl font-semibold">{group.name}</h1>
+        <div className="flex items-center gap-2 mt-1 flex-wrap">
+          <span className="text-ink-soft text-sm">{members.length} members</span>
+          <span className="text-ink-faint">·</span>
+          <span className="text-ink-soft text-sm">
+            Created {new Date(group.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+          </span>
+        </div>
+      </div>
+
+      <div className={`grid grid-cols-2 ${isAdmin ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-3 mb-3`}>
+        <button
+          type="button"
+          onClick={() => setExpandedPanel((v) => (v === 'spend' ? null : 'spend'))}
+          className={`stat-card stat-card-accent-emerald text-left ${expandedPanel === 'spend' ? 'bg-ink/5' : ''}`}
+        >
+          <p className="stat-card-label">Total spend</p>
+          <p className="stat-card-value text-lg">{formatCurrency(totalSpend, currency)}</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => setExpandedPanel((v) => (v === 'expenses' ? null : 'expenses'))}
+          className={`stat-card stat-card-accent-violet text-left ${expandedPanel === 'expenses' ? 'bg-ink/5' : ''}`}
+        >
+          <p className="stat-card-label">Expenses</p>
+          <p className="stat-card-value">{expenses.length}</p>
+        </button>
+        <button
+          type="button"
+          onClick={() => setExpandedPanel((v) => (v === 'members' ? null : 'members'))}
+          className={`stat-card stat-card-accent-amber text-left ${expandedPanel === 'members' ? 'bg-ink/5' : ''}`}
+        >
+          <p className="stat-card-label">Members</p>
+          <p className="stat-card-value">{members.length}</p>
+        </button>
+        {isAdmin ? (
+          <button
+            type="button"
+            onClick={() => setExpandedPanel((v) => (v === 'passkey' ? null : 'passkey'))}
+            className={`stat-card stat-card-accent-neutral text-left ${expandedPanel === 'passkey' ? 'bg-ink/5' : ''}`}
+          >
+            <p className="stat-card-label">Passkey</p>
+            <p className="stat-card-value text-lg font-mono truncate">{group.access_code}</p>
+          </button>
+        ) : null}
+      </div>
+
+      {expandedPanel === 'spend' ? (
+        <div className="receipt-card p-4 mb-5">
+          <p className="label-eyebrow mb-3">Who's paid what</p>
+          {paidByMember.every((p) => p.total === 0) ? (
+            <p className="text-sm text-ink-soft">No expenses yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {paidByMember.map(({ member, total }) => (
+                <li key={member.user_id} className="flex items-center justify-between gap-2">
+                  <span className="text-sm text-ink-soft truncate">
+                    {member.user_id === user?.id ? 'You' : `@${member.profile?.username ?? 'member'}`}
+                  </span>
+                  <span className="font-mono text-sm shrink-0">{formatCurrency(total, currency)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+
+      {expandedPanel === 'expenses' ? (
+        <div className="receipt-card p-4 mb-5">
+          <p className="label-eyebrow mb-3">Recent expenses</p>
+          {recentExpenses.length === 0 ? (
+            <p className="text-sm text-ink-soft">No expenses logged yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {recentExpenses.map((e) => (
+                <li key={e.id} className="flex items-center justify-between gap-2">
+                  <span className="text-sm text-ink-soft truncate">{e.description}</span>
+                  <span className="font-mono text-sm shrink-0">{formatCurrency(e.amount, currency)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+
+      {expandedPanel === 'members' ? (
+        <div className="receipt-card p-4 mb-5">
+          <p className="label-eyebrow mb-3">Group members</p>
+          <p className="text-[11px] text-ink-faint mb-2 -mt-1">
+            Tap a member to see what they've contributed.
+            {isAdmin ? ' Admins can also remove a member from the group.' : ''}
+          </p>
+          <ul className="space-y-1">
+            {members.map((m) => {
+              const contributed = expenses
+                .filter((e) => e.paid_by === m.user_id)
+                .reduce((sum, e) => sum + e.amount, 0);
+              const isOpen = expandedMemberId === m.user_id;
+              const isFuture = m.contribution_start_date > todayStr;
+              return (
+                <li key={m.user_id}>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedMemberId((v) => (v === m.user_id ? null : m.user_id))}
+                      className={`flex-1 min-w-0 flex items-center gap-2.5 text-left rounded px-1.5 py-1.5 -mx-1.5 transition-colors ${isOpen ? 'bg-ink/5' : ''}`}
+                    >
+                      <span className="avatar-circle text-xs" aria-hidden>
+                        {m.profile?.username?.charAt(0)?.toUpperCase() ?? '•'}
+                      </span>
+                      <span className="text-sm text-ink-soft truncate flex-1">
+                        {m.user_id === user?.id ? 'You' : `@${m.profile?.username ?? 'member'}`}
+                      </span>
+                      {m.role === 'admin' ? <span className="status-pill bg-emerald-light text-emerald-dark">Admin</span> : null}
+                      {isOpen ? (
+                        <span className="font-mono text-sm shrink-0 text-emerald">{formatCurrency(contributed, currency)}</span>
+                      ) : null}
+                    </button>
+                    {isAdmin && m.user_id !== user?.id ? (
+                      <button
+                        type="button"
+                        onClick={() => setRemoveMemberTarget(m)}
+                        aria-label={`Remove @${m.profile?.username ?? 'member'} from group`}
+                        title="Remove from group"
+                        className="text-ink-faint hover:text-brick text-lg leading-none px-1.5 py-1.5 shrink-0 transition-colors"
+                      >
+                        ×
+                      </button>
+                    ) : null}
+                  </div>
+                  {isOpen ? (
+                    <div className="flex items-center justify-between gap-2 pl-9 pr-1.5 pb-1">
+                      <span className="text-[11px] text-ink-faint">
+                        {m.contribution_start_source === 'expense' && contributionStartExpenseLabel(m)
+                          ? `Contributing since "${contributionStartExpenseLabel(m)}"`
+                          : isFuture
+                            ? `Starts contributing ${formatDate(m.contribution_start_date)}`
+                            : `Contributing since ${formatDate(m.contribution_start_date)}`}
+                      </span>
+                      {isAdmin ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setContributionEditTarget(m);
+                            setContributionCustomDate(m.contribution_start_date);
+                            setAlsoStartFreshRound(false);
+                            setContributionError(null);
+                            setShowExpensePicker(false);
+                          }}
+                          className="text-[11px] text-emerald hover:underline shrink-0"
+                        >
+                          Change
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+
+      {removeMemberTarget ? (
+        <div className="fixed inset-0 bg-ink/40 flex items-end sm:items-center justify-center z-20 p-0 sm:p-4">
+          <div className="bg-paper w-full sm:max-w-sm sm:rounded-lg rounded-t-2xl overflow-y-auto">
+            <div className="p-5 border-b border-rule flex items-center justify-between">
+              <h2 className="font-mono font-semibold">Remove member</h2>
+              <button
+                onClick={() => {
+                  setRemoveMemberTarget(null);
+                  setRemoveMemberError(null);
+                }}
+                className="text-ink-faint hover:text-ink text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-ink-soft">
+                Remove{' '}
+                <span className="text-ink font-medium">
+                  @{removeMemberTarget.profile?.username ?? 'this member'}
+                </span>{' '}
+                from "{group.name}"? They'll need the group passkey again to rejoin — their past expenses stay in
+                the ledger.
+              </p>
+              {removeMemberError ? <p className="text-brick text-sm">{removeMemberError}</p> : null}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setRemoveMemberTarget(null);
+                    setRemoveMemberError(null);
+                  }}
+                  className="btn-secondary flex-1"
+                >
+                  Cancel
+                </button>
+                <button onClick={handleRemoveMember} disabled={removingMember} className="btn-danger flex-1">
+                  {removingMember ? 'Removing…' : 'Remove'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {contributionEditTarget ? (
+        <div className="fixed inset-0 bg-ink/40 flex items-end sm:items-center justify-center z-20 p-0 sm:p-4">
+          <div className="bg-paper w-full sm:max-w-sm sm:rounded-lg rounded-t-2xl overflow-y-auto">
+            <div className="p-5 border-b border-rule flex items-center justify-between">
+              <h2 className="font-mono font-semibold">Contribution start</h2>
+              <button
+                onClick={() => {
+                  setContributionEditTarget(null);
+                  setContributionCustomDate('');
+                  setContributionError(null);
+                  setShowExpensePicker(false);
+                  setAlsoStartFreshRound(false);
+                }}
+                className="text-ink-faint hover:text-ink text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-ink-soft">
+                When should{' '}
+                <span className="text-ink font-medium">
+                  @{contributionEditTarget.profile?.username ?? 'this member'}
+                </span>{' '}
+                start being included in expenses?{' '}
+                {showExpensePicker
+                  ? "Picking an expense below backfills their share into it and everything after — this is the one option that rewrites existing splits."
+                  : 'The presets below only affect expenses added from now on — nothing already in the ledger changes.'}
+              </p>
+              {contributionError ? <p className="text-brick text-sm">{contributionError}</p> : null}
+              {showExpensePicker ? (
+                <div className="space-y-2">
+                  {expenses.length === 0 ? (
+                    <p className="text-sm text-ink-soft">No expenses logged yet.</p>
+                  ) : (
+                    <ul className="space-y-1 max-h-52 overflow-y-auto -mx-1 px-1">
+                      {expenses.map((e) => (
+                        <li key={e.id}>
+                          <button
+                            type="button"
+                            onClick={() => handleSetContributionFromExpense(e.id)}
+                            disabled={savingContribution}
+                            className="w-full text-left rounded px-2 py-2 hover:bg-ink/5 transition-colors"
+                          >
+                            <span className="text-sm text-ink-soft block truncate">{e.description}</span>
+                            <span className="text-[11px] text-ink-faint">
+                              {formatDate(e.created_at)} · {formatCurrency(e.amount, currency)}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowExpensePicker(false)}
+                    className="btn-secondary w-full"
+                  >
+                    Back
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label className="flex items-start gap-2 text-xs text-ink-soft border border-rule rounded px-3 py-2">
+                  <input type="checkbox" checked={alsoStartFreshRound} onChange={(e) => setAlsoStartFreshRound(e.target.checked)} className="mt-0.5" />
+                  Also start a fresh round from today — every expense added so far will be excluded from the next split.
+                  </label>
+                  <button
+                    onClick={() => handleUpdateContribution('joined_at')}
+                    disabled={savingContribution}
+                    className="btn-secondary w-full text-left"
+                  >
+                    Since they joined ({formatDate(contributionEditTarget.joined_at)})
+                  </button>
+                  <button
+                    onClick={() => handleUpdateContribution('group_creation')}
+                    disabled={savingContribution}
+                    className="btn-secondary w-full text-left"
+                  >
+                    Since the group was created ({formatDate(group.created_at)})
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={contributionCustomDate}
+                      onChange={(e) => setContributionCustomDate(e.target.value)}
+                      className="input-field flex-1"
+                    />
+                    <button
+                      onClick={() => handleUpdateContribution('custom')}
+                      disabled={savingContribution}
+                      className="btn-primary shrink-0"
+                    >
+                      {savingContribution ? 'Saving…' : 'Set date'}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowExpensePicker(true)}
+                    disabled={savingContribution}
+                    className="btn-secondary w-full text-left"
+                  >
+                    From a specific expense…
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showFreshRoundPicker ? (
+        <div className="fixed inset-0 bg-ink/40 flex items-end sm:items-center justify-center z-20 p-0 sm:p-4">
+          <div className="bg-paper w-full sm:max-w-sm sm:rounded-lg rounded-t-2xl overflow-y-auto">
+            <div className="p-5 border-b border-rule flex items-center justify-between">
+              <h2 className="font-mono font-semibold">Start fresh round from…</h2>
+              <button
+                onClick={() => setShowFreshRoundPicker(false)}
+                className="text-ink-faint hover:text-ink text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-ink-soft">
+                Pick an expense — it and everything after it will count in the next split.
+                Everything before it will be marked settled and excluded.
+              </p>
+              {checkpointError ? <p className="text-brick text-sm">{checkpointError}</p> : null}
+              {expenses.length === 0 ? (
+                <p className="text-sm text-ink-soft">No expenses logged yet.</p>
+              ) : (
+                <ul className="space-y-1 max-h-64 overflow-y-auto -mx-1 px-1">
+                  {expenses.map((e) => (
+                    <li key={e.id}>
+                      <button
+                        type="button"
+                        onClick={() => handleStartFreshRoundFromExpense(e.id)}
+                        className="w-full text-left rounded px-2 py-2 hover:bg-ink/5 transition-colors"
+                      >
+                        <span className="text-sm text-ink-soft block truncate">{e.description}</span>
+                        <span className="text-[11px] text-ink-faint">
+                          {formatDate(e.created_at)} · {formatCurrency(e.amount, currency)}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {expandedPanel === 'passkey' && isAdmin ? (
+        <div className="receipt-card px-3 py-2 mb-5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <p className="label-eyebrow shrink-0">Key</p>
+              <button
+                onClick={copyAccessCode}
+                title="Share this so guests can jump straight into this group without an account."
+                className="font-mono text-xs text-emerald hover:underline truncate"
+              >
+                {copiedCode ? 'Copied!' : group.access_code}
+              </button>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                onClick={regenerateAccessCode}
+                disabled={regenerating}
+                className="text-[11px] text-ink-faint hover:text-ink transition-colors"
+              >
+                {regenerating ? '…' : 'Random'}
+              </button>
+              <button
+                onClick={() => setShowCustomCode((v) => !v)}
+                className="text-[11px] text-ink-faint hover:text-ink transition-colors"
+              >
+                Custom
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                title="Delete this group"
+                className="text-[11px] text-brick/70 hover:text-brick transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+          {showCustomCode ? (
+            <form onSubmit={handleSetCustomCode} className="flex items-center gap-2 mt-2 pt-2 border-t border-dashed border-rule">
+              <input
+                autoFocus
+                value={customCode}
+                onChange={(e) => setCustomCode(e.target.value)}
+                className="input-field font-mono flex-1 text-xs py-1"
+                placeholder="Custom, e.g. goa2026"
+              />
+              <button
+                type="submit"
+                disabled={savingCode || !customCode.trim()}
+                className="btn-secondary shrink-0 text-[11px] px-2 py-1"
+              >
+                {savingCode ? '…' : 'Set'}
+              </button>
+            </form>
+          ) : null}
+          {codeError ? <p className="text-brick text-[11px] mt-1">{codeError}</p> : null}
+        </div>
+      ) : null}
+
+      {showDeleteConfirm ? (
+        <div className="fixed inset-0 bg-ink/40 flex items-end sm:items-center justify-center z-20 p-0 sm:p-4">
+          <div className="bg-paper w-full sm:max-w-sm sm:rounded-lg rounded-t-2xl overflow-y-auto">
+            <div className="p-5 border-b border-rule flex items-center justify-between">
+              <h2 className="font-mono font-semibold">Delete group</h2>
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDeleteError(null);
+                }}
+                className="text-ink-faint hover:text-ink text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-ink-soft">
+                Delete <span className="text-ink font-medium">"{group.name}"</span>? This permanently removes every
+                expense, member, and settlement in it — this can't be undone.
+              </p>
+              {deleteError ? <p className="text-brick text-sm">{deleteError}</p> : null}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setDeleteError(null);
+                  }}
+                  className="btn-secondary flex-1"
+                >
+                  Cancel
+                </button>
+                <button onClick={handleDeleteGroup} disabled={deletingGroup} className="btn-danger flex-1">
+                  {deletingGroup ? 'Deleting…' : 'Delete group'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isAdmin && groupId ? <JoinRequestsPanel groupId={groupId} onApproved={load} /> : null}
+
+      <div className="tab-bar">
+        <button onClick={() => setView('expenses')} className={`tab-link ${view === 'expenses' ? 'tab-link-active' : ''}`}>
+          Expenses
+        </button>
+        <button onClick={() => setView('settle')} className={`tab-link ${view === 'settle' ? 'tab-link-active' : ''}`}>
+          Settle up
+        </button>
+      </div>
+
+      {view === 'expenses' ? (
+        <>
+          <button className="btn-primary w-full mb-4" onClick={() => setShowAdd(true)}>
+            + Add expense
+          </button>
+          {expenseError ? <p className="text-brick text-xs mb-3">{expenseError}</p> : null}
+          {expenses.length === 0 ? (
+            <div className="receipt-card p-8 text-center">
+              <p className="text-sm text-ink-soft">No expenses logged yet.</p>
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {expenses.map((e) => (
+                <li key={e.id}>
+                  <ExpenseCard
+                    expense={e}
+                    currency={currency}
+                    canManage={isAdmin || e.created_by === user?.id}
+                    settled={group?.settled_through ? new Date(e.created_at) <= new Date(group.settled_through) : false}
+                    manuallySettled={e.marked_settled}
+                    onEdit={handleEditExpense}
+                    onDelete={handleDeleteExpense}
+                    onToggleSettled={handleToggleExpenseSettled}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : (
+        <div className="space-y-4">
+          {departedCredits.length > 0 ? (
+            <div className="receipt-card p-4 border-l-4 border-l-accent-amber">
+              <p className="label-eyebrow mb-2">Owed to someone who left</p>
+              <ul className="space-y-1 mb-3">
+                {departedCredits.map((d) => (
+                  <li key={d.userId} className="flex items-center justify-between gap-2">
+                    <span className="text-sm text-ink-soft truncate">@{departedName(d.userId)}</span>
+                    <span className="font-mono text-sm shrink-0">{formatCurrency(d.amount, currency)}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-[11px] text-ink-faint">
+                {departedCredits.length === 1 ? 'They paid' : 'They paid'} more than they used before being
+                removed from the group.
+                {isAdmin
+                  ? ' Choose whether to pay them back or share it out among everyone still here.'
+                  : ' The settlement below pays them back.'}
+              </p>
+              {isAdmin ? (
+                <div className="flex gap-2 mt-3">
+                  <button
+                    type="button"
+                    onClick={() => setDepartedCreditMode('repay')}
+                    className={`chip ${departedCreditMode === 'repay' ? 'chip-active' : ''}`}
+                  >
+                    Pay them back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDepartedCreditMode('absorb')}
+                    className={`chip ${departedCreditMode === 'absorb' ? 'chip-active' : ''}`}
+                  >
+                    Split it between us
+                  </button>
+                </div>
+              ) : null}
+              {isAdmin && departedCreditMode === 'absorb' ? (
+                <p className="text-[11px] text-ink-faint mt-2">
+                  {formatCurrency(departedTotal, currency)} will come off what the current members owe, and
+                  nobody will pay them. Re-split to apply it.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {group?.settled_through ? (
+            <div className="receipt-card p-3 mb-3">
+              <p className="text-xs text-ink-faint">
+                Showing expenses since {new Date(group.settled_through).toLocaleDateString()}. Earlier expenses were
+                already settled and won't be split again.
+              </p>
+              {isAdmin ? (
+                <button
+                  type="button"
+                  onClick={handleResetSettlementCheckpoint}
+                  className="text-xs text-ink-faint hover:text-brick mt-1 underline"
+                >
+                  Include everything instead
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className={isAdmin ? 'flex gap-2' : ''}>
+            <button onClick={handleComputeSettlement} disabled={computing} className="btn-primary flex-1">
+              {computing ? 'Splitting…' : settlements.length > 0 ? 'Re-split' : 'Split up'}
+            </button>
+            {isAdmin ? (
+              <button type="button" onClick={handleStartFreshRound} className="btn-secondary flex-1">
+                Start a fresh round from today
+              </button>
+            ) : null}
+          </div>
+
+          {isAdmin ? (
+            <button
+              type="button"
+              onClick={() => setShowFreshRoundPicker(true)}
+              className="text-xs text-ink-faint hover:text-emerald underline mt-1"
+            >
+              Or start from a specific expense…
+            </button>
+          ) : null}
+
+          <SettlementSummary
+            settlements={settlements}
+            currency={currency}
+            canMarkPaid={(s) => s.from_user === user?.id || s.to_user === user?.id || isAdmin}
+            onTogglePaid={toggleSettlementPaid}
+            canDelete={isAdmin}
+            onDelete={handleDeleteSettlement}
+          />
+
+          {checkpointError ? <p className="text-brick text-xs mt-2">{checkpointError}</p> : null}
+          {settlementError ? <p className="text-brick text-xs mt-2">{settlementError}</p> : null}
+        </div>
+      )}
+
+      {(showAdd || editingExpense) && primarySessionId && groupId && user ? (
+        <AddExpenseModal
+          groupId={groupId}
+          sessionId={primarySessionId}
+          currency={currency}
+          onCurrencyChange={handleCurrencyChange}
+          participants={participants}
+          currentUserId={user.id}
+          isAdmin={isAdmin}
+          editingExpense={editingExpense ?? undefined}
+          onClose={closeExpenseModal}
+          onSaved={() => {
+            closeExpenseModal();
+            load();
+          }}
+        />
+      ) : null}
+
+      <ConfirmDialog
+        open={confirmDialog !== null}
+        title={confirmDialog?.title ?? ''}
+        message={confirmDialog?.message ?? ''}
+        confirmLabel={confirmDialog?.confirmLabel}
+        tone={confirmDialog?.tone}
+        onConfirm={() => confirmDialog?.onConfirm()}
+        onCancel={() => setConfirmDialog(null)}
+      />
+    </Layout>
+  );
 }
