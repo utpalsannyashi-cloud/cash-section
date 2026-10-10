@@ -37,7 +37,7 @@ export function Layout({
   return (
     <div className="min-h-dvh flex flex-col">
       <header className="sticky top-0 z-10 bg-paper/90 backdrop-blur border-b border-rule">
-        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
+        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
           <div className="flex items-center gap-3">
             {back ? (
               <button
@@ -52,7 +52,7 @@ export function Layout({
               Cash<span className="text-emerald">§</span>ection
             </Link>
           </div>
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
             <button
               onClick={toggleTheme}
               aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -73,12 +73,12 @@ export function Layout({
             ) : null}
             {profile && !isGuest ? <NotificationBell /> : null}
             {profile && !isGuest ? (
-              <div className="flex items-center gap-2 sm:gap-3">
+              <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
                 {isMasterAdmin ? (
                   <Link
                     to="/master"
                     className={
-                      'text-[11px] font-mono uppercase tracking-wide px-2.5 py-1.5 rounded-md border transition-colors whitespace-nowrap ' +
+                      'text-[10px] sm:text-[11px] font-mono uppercase tracking-wide px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md border transition-colors whitespace-nowrap shrink-0 ' +
                       (isMasterActive
                         ? 'bg-brick/20 text-brick border-brick shadow-glowBrick'
                         : 'bg-violet/10 text-violet border-violet/40 hover:bg-violet/20')
