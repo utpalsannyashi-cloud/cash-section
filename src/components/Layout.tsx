@@ -37,7 +37,7 @@ export function Layout({
   return (
     <div className="min-h-dvh flex flex-col">
       <header className="sticky top-0 z-10 bg-paper/90 backdrop-blur border-b border-rule">
-        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between gap-2">
+        <div className="max-w-2xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between gap-1.5 sm:gap-2">
           <div className="flex items-center gap-3">
             {back ? (
               <button
@@ -48,7 +48,7 @@ export function Layout({
                 <Icon name="arrowLeft" size={18} />
               </button>
             ) : null}
-            <Link to="/" className="font-mono font-semibold tracking-tight text-ink">
+            <Link to="/" className="font-mono font-semibold tracking-tight text-ink text-sm sm:text-base shrink-0">
               Cash<span className="text-emerald">§</span>ection
             </Link>
           </div>
@@ -84,7 +84,8 @@ export function Layout({
                         : 'bg-violet/10 text-violet border-violet/40 hover:bg-violet/20')
                     }
                   >
-                    Master admin
+                    <span className="sm:hidden">Admin</span>
+                    <span className="hidden sm:inline">Master admin</span>
                   </Link>
                 ) : null}
                 <span className="label-eyebrow hidden sm:inline-flex items-center px-2.5 py-1.5 rounded-md bg-ink/5 border border-rule whitespace-nowrap">
