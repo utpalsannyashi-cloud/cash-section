@@ -78,7 +78,7 @@ export function Layout({
                   <Link
                     to="/master"
                     className={
-                      'text-[10px] sm:text-[11px] font-mono uppercase tracking-wide px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md border transition-colors whitespace-nowrap shrink-0 ' +
+                      'h-8 flex items-center justify-center text-[10px] sm:text-[11px] font-mono uppercase tracking-wide px-2.5 rounded-md border transition-colors whitespace-nowrap shrink-0 ' +
                       (isMasterActive
                         ? 'bg-brick/20 text-brick border-brick shadow-glowBrick'
                         : 'bg-violet/10 text-violet border-violet/40 hover:bg-violet/20')
