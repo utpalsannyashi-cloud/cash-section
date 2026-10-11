@@ -38,7 +38,7 @@ export function Layout({
     <div className="min-h-dvh flex flex-col">
       <header className="sticky top-0 z-10 bg-paper/90 backdrop-blur border-b border-rule">
         <div className="max-w-2xl mx-auto px-3 sm:px-4 h-14 flex items-center justify-between gap-1.5 sm:gap-2">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {back ? (
               <button
                 onClick={() => navigate(back)}
@@ -52,7 +52,7 @@ export function Layout({
               Cash<span className="text-emerald">§</span>ection
             </Link>
           </div>
-          <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
+          <div className="flex items-center gap-1 sm:gap-3 min-w-0 overflow-x-auto scrollbar-none">
             <button
               onClick={toggleTheme}
               aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
@@ -84,8 +84,7 @@ export function Layout({
                         : 'bg-violet/10 text-violet border-violet/40 hover:bg-violet/20')
                     }
                   >
-                    <span className="sm:hidden">Admin</span>
-                    <span className="hidden sm:inline">Master admin</span>
+                    Admin
                   </Link>
                 ) : null}
                 <span className="label-eyebrow hidden sm:inline-flex items-center px-2.5 py-1.5 rounded-md bg-ink/5 border border-rule whitespace-nowrap">
