@@ -1220,8 +1220,24 @@ export function GroupDashboard() {
           {group?.settled_through ? (
             <div className="receipt-card p-3 mb-3">
               <p className="text-xs text-ink-faint">
-                Showing expenses since {new Date(group.settled_through).toLocaleDateString()}. Earlier expenses were
-                already settled and won't be split again.
+                {(() => {
+                  // settled_through is the exclusive cutoff (last expense that is
+                  // excluded). Show the date of the first expense that is actually
+                  // included, so the banner matches what the user selected.
+                  const cutoff = new Date(group.settled_through as string);
+                  const firstIncluded = [...expenses]
+                    .filter((e) => new Date(e.created_at) > cutoff)
+                    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0];
+                  const sinceDate = firstIncluded
+                    ? new Date(firstIncluded.created_at).toLocaleDateString()
+                    : new Date(group.settled_through as string).toLocaleDateString();
+                  return (
+                    <>
+                      Showing expenses since {sinceDate}. Earlier expenses were
+                      already settled and won't be split again.
+                    </>
+                  );
+                })()}
               </p>
               {isAdmin ? (
                 <button
