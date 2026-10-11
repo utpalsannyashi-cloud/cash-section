@@ -1,3 +1,4 @@
+import { formatShortDate } from '@/utils/date';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
@@ -299,7 +300,7 @@ export function MasterAdmin() {
                   <p className="font-medium truncate">{s.group_name}</p>
                   <p className="text-xs text-ink-faint mt-0.5">
                     admin @{s.admin_username} ·{' '}
-                    {new Date(s.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    {formatShortDate(s.created_at)}
                   </p>
                 </div>
                 <span className={`status-pill ${s.status === 'open' ? 'bg-emerald-light text-emerald-dark' : 'bg-ink/5 text-ink-faint'}`}>
