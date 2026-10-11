@@ -212,6 +212,23 @@ export function GroupDashboard() {
     load();
   }, [load]);
 
+  // If every computed settlement is already paid, automatically start a
+  // fresh round (move settled_through to now) so the "since" banner updates
+  // to the current date and later expenses begin a new split.
+  useEffect(() => {
+    if (!groupId || loading || !isAdmin) return;
+    if (settlements.length === 0 || !settlements.every((s) => s.is_paid)) return;
+    const currentCutoff = group?.settled_through ? new Date(group.settled_through).getTime() : 0;
+    // Already advanced recently — don't keep rewriting the checkpoint.
+    if (Date.now() - currentCutoff < 60_000) return;
+    const newCheckpoint = new Date().toISOString();
+    supabase
+      .from('groups')
+      .update({ settled_through: newCheckpoint })
+      .eq('id', groupId)
+      .then(() => load());
+  }, [groupId, loading, isAdmin, settlements, group?.settled_through, load]);
+
   // Live updates: anyone adding an expense shows up for everyone instantly.
   useEffect(() => {
     if (sessionIds.length === 0) return;
@@ -471,6 +488,15 @@ export function GroupDashboard() {
 
   const toggleSettlementPaid = async (s: Settlement) => {
     await supabase.from('settlements').update({ is_paid: !s.is_paid }).eq('id', s.id);
+    // If this was the last unpaid transfer, start a fresh round automatically
+    // so the cutoff moves to now and the banner date updates.
+    if (!s.is_paid && groupId) {
+      const othersUnpaid = settlements.some((other) => other.id !== s.id && !other.is_paid);
+      if (!othersUnpaid) {
+        const newCheckpoint = new Date().toISOString();
+        await supabase.from('groups').update({ settled_through: newCheckpoint }).eq('id', groupId);
+      }
+    }
     load();
   };
 
