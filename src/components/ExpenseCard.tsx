@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency } from '@/utils/currency';
+import { formatShortDate } from '@/utils/date';
 import type { Expense } from '@/types';
 
 export function ExpenseCard({
@@ -74,7 +75,7 @@ export function ExpenseCard({
         <div className="flex items-center justify-between mt-1.5">
           <p className="text-xs text-ink-faint">
             Added by <span className="text-ink-soft font-medium">@{expense.payer?.username}</span> ·{' '}
-            {new Date(expense.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+            {formatShortDate(expense.created_at)}
           </p>
           <div className="flex items-center gap-3 shrink-0">
             {expense.attachment_path ? (
