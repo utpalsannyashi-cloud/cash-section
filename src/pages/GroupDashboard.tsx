@@ -1003,7 +1003,7 @@ export function GroupDashboard() {
             </div>
             <div className="p-5 space-y-4">
               <p className="text-sm text-ink-soft">
-                Pick an expense — it and everything after it will count in the next split.
+                Pick an expense — the split will start from it. That expense and everything after it will be included.
                 Everything before it will be marked settled and excluded.
               </p>
               {checkpointError ? <p className="text-brick text-sm">{checkpointError}</p> : null}
