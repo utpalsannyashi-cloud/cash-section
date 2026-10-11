@@ -1236,7 +1236,7 @@ export function GroupDashboard() {
           ) : null}
 
           <div className={isAdmin ? 'flex gap-2' : ''}>
-            <button onClick={handleComputeSettlement} disabled={computing} className="btn-primary flex-1">
+            <button onClick={() => handleComputeSettlement()} disabled={computing} className="btn-primary flex-1">
               {computing ? 'Splitting…' : settlements.length > 0 ? 'Re-split' : 'Split up'}
             </button>
             {isAdmin ? (
