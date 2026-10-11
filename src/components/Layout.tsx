@@ -77,8 +77,9 @@ export function Layout({
                 {isMasterAdmin ? (
                   <Link
                     to="/master"
+                    style={{ height: 32, minHeight: 32 }}
                     className={
-                      'inline-flex items-center justify-center h-8 min-h-[2rem] leading-none text-[10px] sm:text-[11px] font-mono uppercase tracking-wide px-2.5 rounded-md border border-solid transition-colors whitespace-nowrap shrink-0 box-border ' +
+                      'inline-flex items-center justify-center h-8 min-h-[32px] leading-none text-[10px] sm:text-[11px] font-mono uppercase tracking-wide px-2.5 rounded-md border transition-colors whitespace-nowrap shrink-0 box-border ' +
                       (isMasterActive
                         ? 'bg-brick/20 text-brick border-brick shadow-glowBrick'
                         : 'bg-violet/10 text-violet border-violet/40 hover:bg-violet/20')
