@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { formatShortDate } from '@/utils/date';
 
 /**
  * Admin-only queue of people who've entered the group passkey and are
@@ -118,12 +119,7 @@ export function JoinRequestsPanel({ groupId, onApproved }: { groupId: string; on
             <div className="flex-1 min-w-0">
               <p className="text-sm text-ink truncate">@{r.username}</p>
               <p className="text-[11px] text-ink-faint">
-                {new Date(r.requested_at).toLocaleString('en-IN', {
-                  day: 'numeric',
-                  month: 'short',
-                  hour: 'numeric',
-                  minute: '2-digit'
-                })}
+                {formatShortDate(r.requested_at)} {new Date(r.requested_at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
