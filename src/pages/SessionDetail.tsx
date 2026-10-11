@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { deriveTotals, simplifyDebts } from '@/utils/settlement';
 import { formatCurrency } from '@/utils/currency';
+import { formatShortDate } from '@/utils/date';
 import type { Expense, Session, Settlement } from '@/types';
 
 // NOTE: individual sessions are no longer a user-facing concept - see
@@ -166,7 +167,7 @@ export function SessionDetail() {
           </span>
         </div>
         <p className="text-ink-soft text-sm mt-1">
-          {new Date(session.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+          {formatShortDate(session.created_at)}
         </p>
       </div>
 
