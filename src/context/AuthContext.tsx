@@ -25,9 +25,9 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 // session — real account or anonymous guest alike — is dropped and a fresh
 // anonymous session takes its place. Protects a shared/borrowed device from
 // staying signed in indefinitely; the tradeoff is that a guest who's been
-// away for over a day needs to re-enter their group's passkey.
+// away for over 14 days needs to re-enter their group's passkey.
 const LAST_ACTIVITY_KEY = 'cash-section:last-activity-at';
-const INACTIVITY_LIMIT_MS = 24 * 60 * 60 * 1000;
+const INACTIVITY_LIMIT_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
 
 function isAnonymousUser(user: User | null | undefined): boolean {
   return Boolean((user as any)?.is_anonymous);
@@ -59,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // new anonymous one — so guests can browse sessions and unlock one with
     // a passkey without ever hitting a login wall. Admins/members who sign
     // in for real simply replace this anonymous session afterwards. Any
-    // session that's been idle for over a day gets signed out right here,
+    // session that's been idle for over 14 days gets signed out right here,
     // before it's ever handed to the rest of the app.
     const bootstrap = async () => {
       const { data } = await supabase.auth.getSession();
