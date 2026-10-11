@@ -10,12 +10,13 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { deriveTotals, findDepartedCredits, simplifyDebts } from '@/utils/settlement';
 import { formatCurrency } from '@/utils/currency';
+import { formatShortDate } from '@/utils/date';
 import type { ContributionSource, Expense, Group, GroupMember, Settlement } from '@/types';
 
 const CODE_PATTERN = /^[a-z0-9]{6,20}$/;
 
 function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  return formatShortDate(dateStr);
 }
 
 /**
@@ -702,7 +703,7 @@ export function GroupDashboard() {
           <span className="text-ink-soft text-sm">{members.length} members</span>
           <span className="text-ink-faint">·</span>
           <span className="text-ink-soft text-sm">
-            Created {new Date(group.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+            Created {formatShortDate(group.created_at)}
           </span>
         </div>
       </div>
@@ -1255,8 +1256,8 @@ export function GroupDashboard() {
                     .filter((e) => new Date(e.created_at) > cutoff)
                     .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0];
                   const sinceDate = firstIncluded
-                    ? new Date(firstIncluded.created_at).toLocaleDateString()
-                    : new Date(group.settled_through as string).toLocaleDateString();
+                    ? formatShortDate(firstIncluded.created_at)
+                    : formatShortDate(group.settled_through as string);
                   return (
                     <>
                       Showing expenses since {sinceDate}. Earlier expenses were
