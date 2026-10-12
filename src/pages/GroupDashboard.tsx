@@ -1161,7 +1161,17 @@ export function GroupDashboard() {
                     expense={e}
                     currency={currency}
                     canManage={isAdmin || e.created_by === user?.id}
-                    settled={group?.settled_through ? new Date(e.created_at) <= new Date(group.settled_through) : false}
+                    settled={group?.settled_through ? (() => {
+                      // Compare calendar days only. An expense dated the same day
+                      // as the checkpoint (or later) is not auto-struck — that
+                      // way a newly added entry doesn't appear settled just
+                      // because the cutoff was set earlier the same day.
+                      const exp = new Date(e.created_at);
+                      const cut = new Date(group.settled_through as string);
+                      const expDay = new Date(exp.getFullYear(), exp.getMonth(), exp.getDate()).getTime();
+                      const cutDay = new Date(cut.getFullYear(), cut.getMonth(), cut.getDate()).getTime();
+                      return expDay < cutDay;
+                    })() : false}
                     manuallySettled={e.marked_settled}
                     onEdit={handleEditExpense}
                     onDelete={handleDeleteExpense}
