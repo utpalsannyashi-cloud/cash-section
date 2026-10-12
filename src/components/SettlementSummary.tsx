@@ -23,11 +23,8 @@ export function SettlementSummary({
   if (settlements.length === 0) {
     return (
       <div className="receipt-card p-6 text-center">
-        <p className="text-sm font-medium text-emerald-dark flex items-center justify-center gap-1.5">
-          <Icon name="check" size={16} className="text-emerald-dark" />
-          All settled up
-        </p>
-        <p className="text-xs text-ink-soft mt-1">Everyone's even. Nothing to settle.</p>
+        <p className="text-sm font-medium text-ink">Nothing calculated yet</p>
+        <p className="text-xs text-ink-soft mt-1">Tap Split up to work out who owes what for the current expenses.</p>
       </div>
     );
   }
